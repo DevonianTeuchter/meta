@@ -1,0 +1,85 @@
+#!/bin/sh
+# Removal utility for z/OS Open Tools - https://github.com/ZOSOpenTools
+
+export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
+
+. "${utildir}/common.inc"
+
+printSyntax() 
+{
+  args=$*
+  echo "zopen remove is a utility to remove installed z/OS Open Tools packages."
+  echo "Syntax: zopen remove [<option>]* <package, ...>" >&2
+  echo "  where <option> may be one or more of:" >&2
+  echo "  -p|--purge: remove package, the versioned directory and any cached file"  >&2
+  echo "  -v: run in verbose mode" >&2
+  echo "  and <package> is a list of one or more projects to uninstall" >&2
+}
+
+unsymlinkFromSystem(){
+  printVerbose "Removing orphaned symlinks from the usr file structure"
+  find $ZOPEN_ROOTFS/usr/ -type l -exec test ! -e {} \; -print | while read sl; do
+    printVerbose "Removing symlink '$sl'"
+    rm -f $sl
+  done
+}
+
+removePackageDirectories(){
+  pkg=$1
+  printVerbose "Finding and removing any directories associated with package"
+  find $ZOPEN_ROOTFS/usr/ -type d -name $pkg -print | while read rmdir; do
+    printVerbose "Removing orphaned directory: $rmdir"  
+    rm -rf $rmdir
+  done
+}
+removePackages(){
+  pkglist=$1
+  echo "$pkglist" | xargs | tr ' ' '\n' | sort | while read pkg; do
+    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.zot ]; then 
+      printInfo "Package '$pkg' is not installed"
+    else
+      deref=$(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P | awk -F/ '{ print $(NF)}')
+      if $purge; then
+        printVerbose "Need to remove the symlink and the versioned directory"
+        rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
+      else
+        printVerbose "Removing metadata file to mark uninstall"
+        rm -f $ZOPEN_PKGINSTALL/$pkg/.zot
+      fi
+      printVerbose "Breaking/removing the link from current to versioned"
+      rm -f $ZOPEN_PKGINSTALL/$pkg/
+      printVerbose "Removing any profiled processing"
+      [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
+      unsymlinkFromSystem
+      removePackageDirectories $pkg
+    fi
+  done
+}
+
+# Main code start here
+args=$*
+
+verbose=false
+purge=false
+chosenRepos=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    "-p" | "--purge")
+      purge=true
+      ;;
+    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printSyntax "${args}"
+      exit 4
+      ;;
+    "-v" | "--v" | "-verbose" | "--verbose")
+      verbose=true
+      ;;
+    *)
+      chosenRepos="$chosenRepos $1";
+      ;;
+  esac
+  shift;
+done
+
+[[ ! -z "$chosenRepos" ]] || printError "No packages selected for removal" 
+removePackages $chosenRepos

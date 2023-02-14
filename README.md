@@ -1,3 +1,6 @@
+# fork notes
+This is an attempt to add packaging capabilities to zopen, prior to the native install capability
+
 # meta
 Meta repository to tie together the various underlying z/OS Open Source tools repositories here.
 

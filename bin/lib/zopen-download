@@ -1,0 +1,311 @@
+#!/bin/sh
+# Download utility for z/OS Open Tools - https://github.com/ZOSOpenTools
+
+export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
+
+. "${utildir}/common.inc"
+
+printSyntax() 
+{
+  args=$*
+  echo "zopen download is a utility to download/install a z/OS Open Tools package."
+  echo "If you have a Github OAUTH token, export the environment variable ZOPEN_GIT_OAUTH_TOKEN" >&2
+  echo "Syntax: zopen download [<option>]* <package, ...>" >&2
+  echo "  where <option> may be one or more of:" >&2
+  echo "  -u|--update|--upgrade: updates installed z/OS Open Tools packages."  >&2
+  echo "  --install-or-upgrade: installs the package if not installed, or upgrades the package if installed."  >&2
+  echo "  --reinstall: reinstall already installed z/OS Open Tools packages."  >&2
+  echo "  --nosymlink: do not integrate into filesystem through symlink redirection. " >&2
+  echo "  -v: run in verbose mode" >&2
+  echo "  -d, --download-only: download package to current directory" >&2
+  echo "  -l, --local-install: download and unpackage to current directory" >&2
+  echo "  and <package> is a list of one or more projects to install" >&2
+}
+
+getContentsFromGithub()
+{
+  url=$1
+  printVerbose "Requesting from url:${url}"
+  if ! repo_results=$(curl $OAUTH_TOKEN_OPTION "$OAUTH_TOKEN" -s "$url"); then
+    printWarning "curl command could not download $url"
+  fi
+  
+  if echo $repo_results | grep -q "API rate limit exceeded for" 2>/dev/null; then
+    printError "API rate limit exceeded for github.\n1. Generate a token (https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token).\n2. Set ZOPEN_GIT_OAUTH_TOKEN and rerun"
+  fi
+  if echo $repo_results | grep -q "Bad credentials" 2>/dev/null; then
+    printError "Your ZOPEN_GIT_OAUTH_TOKEN is invalid. Please validate that it is correct and re-run."
+  fi
+  echo "$repo_results";
+}
+
+symlinkIntoSystem(){
+  if ! $nosymlink; then
+     printInfo "Integrating package into file system"
+
+     printVerbose "Ensuring structure directories exist for integration"
+     basedir=$installdir/$name/
+     target=$ZOPEN_ROOTFS/usr
+     find $basedir -type d | sort -r | while read dir; do
+       dir=$(echo $dir | sed "s#^$basedir##")
+       printVerbose "Found sub-directory: ${dir}; ensuring existance in zopen structure"
+       mkdir -p $target/$dir
+     done
+      printVerbose "Recursively force-link any files in the directories"
+      ln -rfs $basedir $target
+      
+      printVerbose "Cleaning up"
+      # TODO work out nicer mechanism
+      rm -f $target/.env $target/.releaseinfo $target/.zot $target/README.md $target/test.status $target/setup.sh
+  fi
+}
+
+
+downloadRepos()
+{
+  echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
+    name=${repo%port}
+    if ! latest_url="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+      exit 4;
+    fi
+
+    printHeader "Preparing to download $repo"
+    if [ -z "$latest_url" ]; then
+      printInfo "No releases published for $repo"
+      continue
+    fi
+
+    latestTag="$(echo "$latest_url" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+    if $upgradeInstalled || $installOrUpgrade; then
+      if [ -e "${ZOPEN_PKGINSTALL}/${name}/.zot" ]; then
+        originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
+        printVerbose "originalTag = $originalTag"
+      elif ! $installOrUpgrade; then
+        # We're only updating already installed products
+        printVerbose "${downloadDir}/${name} will not be upgraded as it is not installed."
+        continue;
+      fi
+      if [ "${latestTag}" = "${originalTag}" ] && ! $reinstall; then
+        printVerbose "${downloadDir}/${name} with latest release tag \"${latestTag}\" already installed. Skipping..."
+        continue;
+      fi
+      printInfo "New release with tag \"${latestTag}\" found for $repo"
+    fi
+    printInfo "Preparing to download $repo"
+    if [ -z "$latest_url" ]; then
+      printInfo "No releases published for $repo"
+      continue
+    fi
+
+    latest_url="$(echo "$latest_url" | grep "\"browser_download_url\":" | cut -d '"' -f 4)"
+    printVerbose "Checking cache for already downloaded package [file name comparison]"
+    pax=$(basename $latest_url)
+    if [ -f $pax ]; then
+      printInfo "Found existing file '${pax}' in download cache."
+    else
+      printInfo "Downloading latest release from $repo..."
+      if ! $verbose; then
+        redirectToDevNull="2>/dev/null"
+      fi 
+      if ! runAndLog "curl -L ${latest_url} -O ${redirectToDevNull}"; then
+        printWarning "Could not download ${latest_url}"
+        continue;
+      fi
+    fi
+    if ! $downloadOnly; then
+      if [ ! -f "${pax}" ]; then
+        printError "${pax} was not actually downloaded?"
+      fi
+      printInfo "Extracting $pax..."
+      installdir="."
+      paxredirect=""
+      if ! $localInstall; then
+        installdir=$ZOPEN_PKGINSTALL
+        paxredirect="-s##$ZOPEN_PKGINSTALL/#"
+      fi
+      dirname=${pax%.pax.Z}
+      printVerbose "Check for existing directory for version"
+      if [ -d $installdir/$dirname ]; then 
+        printInfo "Removing existing directory and contents"
+        rm -rf $installdir/$dirname
+      fi
+      if ! runAndLog "pax -rf $pax -p p $paxredirect ${redirectToDevNull}"; then
+        printWarning "Could not extract $pax. Skipping"
+        continue;
+      fi
+      if $localInstall; then
+        rm -f "${pax}"
+      fi
+      if [ -L $installdir/$name ]; then
+        printVerbose "Removing old symlink '$installdir/$name' and recreating"
+        rm -f $installdir/$name
+      fi 
+
+      if ! ln -s $installdir/$dirname $installdir/$name; then
+        printError "Could not create symbolic link name"
+      fi 
+
+      # Add tag information as a .releaseinfo file
+      echo "$latestTag" > "${installdir}/${name}/.releaseinfo"
+      echo "releaseinfo=$latestTag" > "${installdir}/${name}/.zot"
+      if ! $localInstall; then
+        symlinkIntoSystem
+      fi
+      printVerbose "Checking for env file"
+      if [ -f ${installdir}/${name}/.env ]; then
+         printVerbose ".env file found, adding to profiled processing"
+         mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
+cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
+curdir=\$(pwd)
+cd "$installdir/$name"
+. .env
+cd \$curdir
+EOF
+        printVerbose "Sourcing .env - change to install dir and back, no subshell"
+        currDir=$(pwd)
+        cd "$installdir/$name"
+        . .env
+        cd $currDir
+        
+      fi
+
+#    printVerbose "Sanitising environment variables"
+#    newPath=""
+#    echo $PATH |  tr ':' '\n' | while pathp; do
+#      if [ "$installdir/$dirname/bin" = $pathp ]; then
+#        printVerbose "Found an entry which would be mapped through usr/bin. Skipping"
+#      else
+#        newPath="$newPath:$pathp"
+#        printVerbose "New path currently: newPath
+#      fi
+#    done 
+#    export PATH=$newPath
+    fi
+    printInfo "Successfully downloaded $name"
+  done
+}
+
+# Main code start here
+args=$*
+if [ ! -z "$ZOPEN_PKGINSTALL" ]; then
+  downloadDir="$ZOPEN_PKGINSTALL"
+else
+  downloadDir=$PWD
+fi
+
+upgradeInstalled=false
+verbose=false
+downloadOnly=false
+localInstall=false
+reinstall=false
+installOrUpgrade=false
+nosymlink=false
+chosenRepos=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    "-u" | "--update" | "-update" | "-upgrade" | "--upgrade")
+      upgradeInstalled=true
+      ;;
+    "-r" | "-reinstall" | "--reinstall")
+      reinstall=true
+      ;;
+    "--install-or-upgrade")
+      installOrUpgrade=true
+      ;;
+    "-d" | "--download-only")
+      downloadOnly=true
+      ;;
+    "-l" | "--local-install")
+      localInstall=true
+      ;;
+    "-n" | "--nosymlink")
+      nosymlink=true
+    ;;
+    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printSyntax "${args}"
+      exit 4
+      ;;
+    "-v" | "--v" | "-verbose" | "--verbose")
+      verbose=true
+      ;;
+    *)
+      chosenRepos="$chosenRepos $1";
+      ;;
+  esac
+  shift;
+done
+
+[[ ! -z "${ZOPEN_CA}" ]] || printError "Internal Error. \$ZOPEN_CA must be set"
+[[ -r "${ZOPEN_CA}" ]] || printError "Internal Error. Certificate ${ZOPEN_CA} is required"
+
+export SSL_CERT_FILE="${ZOPEN_CA}"
+export GIT_SSL_CAINFO="${ZOPEN_CA}"
+export CURL_CA_BUNDLE="${ZOPEN_CA}"
+
+if [ ! -z "${ZOPEN_GIT_OAUTH_TOKEN}" ]; then
+  OAUTH_TOKEN_OPTION='-H'
+  OAUTH_TOKEN="Authorization: Bearer ${ZOPEN_GIT_OAUTH_TOKEN}" 
+else
+  printWarning "Setting ZOPEN_GIT_OAUTH_TOKEN is recommended to ensure that you do not hit the GitHub API cap. See --help for more details."
+fi
+
+# Retrieve all repositories
+if ! repo_results="$(getContentsFromGithub "https://api.github.com/users/ZOSOpenTools/repos?per_page=250")"; then
+  exit 4;
+fi
+repo_results=$(echo "$repo_results" | grep "\"full_name\":" 2>/dev/null | cut -d '"' -f 4)
+
+if $downloadOnly | $localInstall; then
+  downloadDir=$PWD
+else
+  if [ -z "$ZOPEN_ROOTFS" ]; then
+    printError "Unable to locate zopen file system, \$ZOPEN_ROOTFS is undefined"
+  fi
+  downloadDir=$ZOPEN_ROOTFS/var/cache/zopen
+fi
+
+if [ ! -d "${downloadDir}" ]; then
+  mkdir -p "${downloadDir}"
+  if $?; then
+    printError "Could not create download directory: $downloadDir"
+  fi
+fi
+
+if [ ! -z "${downloadDir}" ] && [ -d "${downloadDir}" ]; then
+  cd "${downloadDir}"
+fi
+
+printVerbose "Download directory: ${downloadDir}"
+
+# Parse repositories for zopen framework repos
+foundPort=false
+repoArray=""
+for repo in $(echo ${repo_results}); do
+  repo=${repo#"ZOSOpenTools/"}
+  name=${repo%port}
+
+  # Skip repos that do not end with port
+  if [ "${name}" = "${repo}" ]; then
+    continue;
+  fi
+
+  if [ -z "${chosenRepos}" ]; then
+    repoArray="$repoArray $repo"
+  else
+    for toolrepo in $(echo "${chosenRepos}" | tr ',' '\n'); do
+      if [ "${toolrepo}" = "${repo}" ] || [ "${toolrepo}" = "${name}" ]; then
+        # Skip if the repo does not end with port
+        if [ "${repo}" = "${name}" ]; then
+          continue;
+        fi
+        repoArray="$repoArray $repo"
+      fi
+    done
+  fi
+done
+
+if [ -z "$repoArray" ]; then
+  printError "Could not find specified $toolrepo. Use 'list' option to view available ports"
+fi
+
+downloadRepos

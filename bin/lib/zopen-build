@@ -106,7 +106,7 @@ TMP_FIFO_PIPE="$tmp/$LOGNAME.pipe"
 # Capture start time before setting trap
 fullBuildStartTime=$SECONDS
 
-# Remove temoraries on exit and report elapsed time
+# Remove temporaries on exit and report elapsed time
 cleanupOnExit() {
     rv=$?
     [ -f $TEMP_C_FILE ] && rm -rf $TEMP_C_FILE

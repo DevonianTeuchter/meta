@@ -1,0 +1,162 @@
+#!/bin/sh
+# "Alternatives" utility for z/OS Open Tools - https://github.com/ZOSOpenTools
+
+export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
+
+. "${utildir}/common.inc"
+
+printSyntax() 
+{
+  args=$*
+  echo "zopen alt is a utility for z/OS Open Tools to switch package versions for currently installed packages" >&2
+  echo "Syntax: zopen-query [<option>]* [<package]" >&2
+  echo "  where <option> may be one or more of:" >&2
+  echo "  --list: list all available package versions"  >&2
+  echo "  --set: set version" >&2
+  echo "  -i : --installed: list install z/OS Open Tools." >&2
+  echo "  -v: run in verbose mode." >&2
+  echo " and <package> is a package name." >&2
+}
+# Following function is broadly similar to that in zopen-download
+symlinkIntoSystem(){
+  name=$1
+  printInfo "Integrating package into file system"
+
+  printVerbose "Ensuring structure directories exist for integration"
+  basedir=$ZOPEN_PKGINSTALL/$name/
+  target=$ZOPEN_ROOTFS/usr
+  find $basedir -type d | sort -r | while read dir; do
+    dir=$(echo $dir | sed "s#^$basedir##")
+    printVerbose "Found sub-directory: ${dir}; ensuring existance in zopen structure"
+    mkdir -p $target/$dir
+  done
+   printVerbose "Recursively link any files in the directories"
+   ln -rfs $basedir $target
+   
+   printVerbose "Cleaning up"
+   # TODO work out nicer mechanism
+   rm -f $target/.env $target/.releaseinfo $target/.zot $target/README.md $target/test.status $target/setup.sh
+         # Add tag information as a .releaseinfo file
+   tag=$(cat $ZOPEN_PKGINSTALL/$name/.releaseinfo)
+   echo "releaseinfo=$tag" > "${ZOPEN_PKGINSTALL}/${name}/.zot"
+   printVerbose "Checking for env file"
+   if [ -f ${ZOPEN_PKGINSTALL}/${name}/.env ]; then
+      printVerbose ".env file found, adding to profiled processing"
+      mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
+cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
+curdir=\$(pwd)
+cd "$ZOPEN_PKGINSTALL/$name"
+. .env
+cd \$curdir
+EOF
+    printVerbose "Sourcing .env - change to install dir and back, no subshell"
+    currDir=$(pwd)
+    cd "$ZOPEN_PKGINSTALL/$name"
+    . .env
+    cd $currDir
+  fi
+}
+
+setAlt(){
+  i=$1
+  needle=$2
+  printVerbose "Setting alternative"
+    valid=false
+    while ! $valid; do
+      echo "Enter alternative version to use (1-$i): "
+      selection=$(getInput)
+      if [[ ! -z "$(echo $selection | sed -e 's/[0-9]//')" ]]; then
+        echo "Invalid input, must be a number between 1 and $i"
+      elif [ "$selection" -ge 1 ] && [ "$selection" -le "$i" ]; then
+        valid=true
+      fi
+    done
+    if [ ! $selection -eq $current ]; then
+      newver="$(echo $found | awk -v selection=$selection '
+        BEGIN {count=0}
+              {count = count + 1; if (count=selection) { print $(selection)} }
+      ')"
+      printInfo "Setting alternative: $selection: $newver"
+      printVerbose "Removing symlinks from current version"
+      $utildir/zopen-remove $needle
+      [ -d $newver ] || printError "Mismatch found, no version directory at $newver" 
+      [ ! -z "$needle" ] || printError "$ZOPEN_PKGINSTALL/$needle not found"
+      rm -rf $ZOPEN_PKGINSTALL/$needle
+      
+      printVerbose "Generating main link from $needle to version: $newver"
+      if ! ln -sf $newver $ZOPEN_PKGINSTALL/$needle; then
+        printError "Could not create symbolic link name"
+      fi
+      symlinkIntoSystem $needle
+    else
+      printInfo "Selection is already current version."
+      exit 0
+    fi
+}
+
+listAlts(){
+  sett=$1
+  needle=$2
+  found=$(find $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d  | grep "/${needle}-[^/]*")
+  if [[ -z $found ]]; then
+    printInfo "No currently installed version of package '${needle}'"
+    exit 4
+  fi
+  deref=$(ls -l $ZOPEN_PKGINSTALL/$needle | awk '{ print $(NF) }')
+  printVerbose "Current version: ${deref#$ZOPEN_PKGINSTALL/}"
+
+  i=0
+  current=0
+# the below would be simpler, but creates a subshell so can't get the number of entries outside!  
+#  echo "$found" | xargs | tr ' ' '\n' | while read repo; do
+  TMP_FIFO_PIPE="$HOME/altselect.pipe"
+  [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
+  mkfifo $TMP_FIFO_PIPE
+  echo "$found" | xargs | tr ' ' '\n'>> $TMP_FIFO_PIPE &
+  while read repo; do
+    i=$(expr $i + 1)
+    if [[ "${deref#$ZOPEN_PKGINSTALL/}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
+      current=$i
+      printInfo "${NC}${GREEN}$i: ${repo#$ZOPEN_PKGINSTALL/}  <-  current${NC}"
+    else
+      printInfo "$i: ${repo#$ZOPEN_PKGINSTALL/}"
+    fi
+  done < $TMP_FIFO_PIPE
+  [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
+  
+  if $sett; then
+    setAlt $i $needle
+  fi
+  exit 0
+}
+
+
+# Main code start here
+args=$*
+verbose=false
+sett=false
+if [[ $# -eq 0 ]]; then
+  printError "No option provided for query"
+fi
+while [[ $# -gt 0 ]]; do
+  printVerbose "Parsing option: $1"
+  case "$1" in
+    "-s" | "--set")
+      sett=true
+      ;;
+    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printSyntax "${args}"
+      exit 4
+      ;;
+    "-v" | "--v" | "-verbose" | "--verbose")
+      verbose=true
+      ;;
+    *)
+      packageList="$packageList $1";
+      ;;
+  esac
+  shift;
+done
+
+[[ -z "$packageList" ]] || listAlts $sett $packageList
+printError "No action verb specified"

@@ -1,32 +1,70 @@
 #!/bin/sh
-#
-# Creates a $HOME/.zopen-config file
-#
-export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
+# Initialize zopen
 
+echo $utildir
+if [ -z "$utildir" ]; then
+  export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
+fi
 . "${utildir}/common.inc"
+
 
 printSyntax() 
 {
   args=$*
-  echo "zopen-init will initialize zopen (create a $HOME/.zopen-config file)" >&2
+  echo "zopen init will initialize the zopen filesystem and configuration (create a $HOME/.zopen-config file)" >&2
+  echo "Syntax: zopen init [<option>] <root-dir>" >&2
+  echo "  where <option> can be one or more of:" >&2
+  echo "  -f <type>: use an alternative virtual filesystem layout" >&2
+  echo "      prod - zopen standard (default);" >&2
+  echo "      ibm  - /usr/lpp;" >&2
+  echo "      fhs  - File Hierarchical Standard (/opt)"  >&2
+  echo "  -v: run in verbose mode" >&2
+  echo "  -?: display help" >&2
 }
 
+args=$*
+
+verbose=false
+layoutfs="prod"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    "-f")
+      layoutfs=$2
+      shift
+      ;;
+    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printSyntax "${args}"
+      exit 4
+      ;;
+    "-v" | "--v" | "-verbose" | "--verbose")
+       verbose=true
+      ;;
+    *)
+      rootfs=$1;
+      ;;
+  esac
+  shift;
+done
+case "$layoutfs" in
+  fhs|ibm|prod)
+  ;;
+  *)
+    printError "The filesystem layout $layoutfs is unrecognised"
+    ;;
+esac
 printHeader "Initialize zopen framework"
-
-echo "Enter the path to your zopen install directory (default: $HOME/zopen)"
-zopen_path=$(getInput)
-
-# If the user did not enter a path, use the default
-if [ -z "$zopen_path" ]; then
-  zopen_path="$HOME/zopen"
+if [ ! -z "$ZOPEN_ROOT_PATH" ]; then
+  rootfs="$ZOPEN_ROOT_PATH"
 fi
 
-if [ ! -e "$zopen_path/prod" ]; then
-  mkdir -p "$zopen_path/prod"
+if [ -z "$rootfs" ]; then
+  printInfo "Enter the path to your zopen root directory (default: \$HOME/zopen)"
+  rootfs=$(getInput)
 fi
-if [ ! -e "$zopen_path/boot" ]; then
-  mkdir -p "$zopen_path/boot"
+
+if [ -z "$rootfs" ]; then
+  echo "Using default: \$HOME/zopen"
+  rootfs="$HOME/zopen"
 fi
 
 echo "Enter the github oauth token for use in zopen-download. If none, press enter"
@@ -35,12 +73,77 @@ if [ ! -z "$zopen_oauth" ]; then
   zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$zopen_oauth"
 fi
 
+printInfo "Populating standard file system"
+[[ -e "$rootfs/bin" ]] || mkdir -p "$rootfs/bin"
+[[ -e "$rootfs/etc" ]] || mkdir -p "$rootfs/etc"
+[[ -e "$rootfs/include" ]] || mkdir -p "$rootfs/include"
+[[ -e "$rootfs/usr/share" ]] || mkdir -p "$rootfs/usr/share"
+[[ -e "$rootfs/usr/share/man" ]] || mkdir -p "$rootfs/usr/share/man"
+[[ -e "$rootfs/usr/share/zopen" ]] || mkdir -p "$rootfs/usr/share/zopen"
+[[ -e "$rootfs/var/cache/zopen" ]] || mkdir -p "$rootfs/var/cache/zopen"
+
+printInfo "Creating path for bootstrap files"
+[[ -e "$rootfs/boot" ]] || mkdir -p "$rootfs/boot"
+
+printInfo "Creating symbolic path for prod redirect files"
+[[ -e "$rootfs/usr/share/zopen/boot" ]] || ln -s "$rootfs/boot" "$rootfs/usr/share/zopen/boot"
+case "$layoutfs" in
+  "fhs")
+    zopen_pkginstall="opt"
+  ;;
+  "ibm")
+    zopen_pkginstall="usr/lpp"
+    ;;
+  "prod")
+    zopen_pkginstall="prod"
+  ;;
+esac
+[[ -e "$rootfs/$zopen_pkginstall" ]] || mkdir -p "$rootfs/$zopen_pkginstall"
+[[ -e "$rootfs/usr/share/zopen/prod" ]] || ln -s "$rootfs/$zopen_pkginstall" "$rootfs/usr/share/zopen/prod"
+
+printInfo "Creating path for certificate lookups"
+ZOPEN_CA_DIR="etc/pki/tls/certs"  # TODO: Work out "proper" location
+[[ -e "$rootfs/$ZOPEN_CA_DIR" ]] || mkdir -p "$rootfs/$ZOPEN_CA_DIR"
 
 # Save the configuration to the file
+echo "export ZOPEN_ROOTFS=$rootfs" > "$HOME/.zopen-config"
 
-cat <<zz >"${HOME}/.zopen-config"
-export ZOPEN_SEARCH_PATH=$zopen_path
+# Add the profiled processing first so the zopen paths are added first
+cat << EOF >>  "$HOME/.zopen-config"
 $zopen_oauth
-zz
+if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
+  for FILE in \$( find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print )
+  do
+    . \$FILE
+  done
+fi
+EOF
 
-printInfo "Creating config in $HOME/.zopen-config"
+echo "export ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall" >> "$HOME/.zopen-config"
+echo "export ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/" >> "$HOME/.zopen-config"
+echo "export ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"  >> "$HOME/.zopen-config"
+echo "export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$PATH"  >> "$HOME/.zopen-config"
+echo "export LIBPATH=\$ZOPEN_ROOTFS/usr/lib"  >> "$HOME/.zopen-config"
+
+printInfo "Created config in $HOME/.zopen-config. Updating environment"
+. "$HOME/.zopen-config"
+
+printInfo "Running bootstrap"
+runAndLog "${utildir}/zopen-bootstrap.rexx"
+printVerbose "Downloaded bootstrapped curl. Configuring for use"
+# Need to source the .env file from within the actual curl directory and cannot
+# spawn sub-processes so run inline
+curlfile="$(ls ~/zopen/boot |grep curl)"
+chmod -R 755 $rootfs/boot/$curlfile
+curwd=$PWD
+cd $rootfs/boot/$curlfile/
+. .env
+cd $curwd
+
+printInfo "Updating CA cert"
+runAndLog "${utildir}/zopen-update-cacert -v -i -f"
+
+runAndLog "${utildir}/zopen-download git -v"
+printInfo "Merging meta package into zopen system"
+runAndLog "${utildir}/zopen-download meta -v"
+

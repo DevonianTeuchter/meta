@@ -7,13 +7,17 @@ printSyntax()
   echo "" >&2
   echo "Syntax: zopen <command>" >&2
   echo "where <command> may be one of the following:" >&2
-  echo " init: generate a $HOME/.zopen-config file." >&2
+  echo " init: generate $HOME/.zopen-config; builds file structure; bootstraps" >&2
   echo " build: invokes the build script." >&2
-  echo " download: downloads z/OS Open Tools (deprecated)" >&2
-  echo " install: downloads and installs z/OS Open Tools" >&2
+  echo " download: downloads z/OS Open Tool package(s)" >&2
+  echo " install: installs z/OS Open Tool package(s))" >&2
   echo " generate: generate a zopen project" >&2
   echo " update-cacert: update the cacert.pem file" >&2
   echo " upgrade: upgrades already installed tools" >&2
+  echo " list: lists currently available zOpen Tool packages" >&2
+  echo " query: queries zOpen Tool packages" >&2
+  echo " remove: removes installed zOpen Tool packages" >&2
+  echo " alt: switch local versions of zOpen Tool packages" >&2
   echo "" >&2
 }
 
@@ -45,14 +49,13 @@ while [[ $# -gt 0 ]]; do
       ;;
     "download")
       shift
-      printWarning "zopen download is deprecated and will be removed March 1, 2023. Please use zopen install instead."
-      exec "${bindir}/lib/zopen-install" $@
+      exec "${bindir}/lib/zopen-download" $@
       ;;
     "install")
       shift
       exec "${bindir}/lib/zopen-install" $@
       ;;
-    "upgrade")
+    "upgrade" | "up")
       shift
       exec "${bindir}/lib/zopen-install" -u $@
       ;;
@@ -67,6 +70,22 @@ while [[ $# -gt 0 ]]; do
     "init")
       shift
       exec "${bindir}/lib/zopen-init" $@
+      ;;
+    "list" | "-l")
+      shift
+      exec "${bindir}/lib/zopen-query" "--list" $@
+      ;;
+    "query" | "-q")
+      shift
+      exec "${bindir}/lib/zopen-query" $@
+      ;;
+    "remove" | "-r" | "uninstall" | "un" | "erase" | "e")
+      shift
+      exec "${bindir}/lib/zopen-remove" $@
+      ;;
+    "alt" | "-a")
+      shift
+      exec "${bindir}/lib/zopen-alt" $@
       ;;
     "help" | "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
       printHelp "${args}"

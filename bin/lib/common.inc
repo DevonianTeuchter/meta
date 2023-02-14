@@ -3,9 +3,14 @@ defineColors()
 {
   if [ ! "${_BPX_TERMPATH-x}" = "OMVS" ] && [ -z "${NO_COLOR}" ] && [ ! "${FORCE_COLOR-x}" = "0" ] && [ -t 1 ] && [ -t 2 ]; then
     esc="\047"
+    BLACK="${esc}[30m"
     RED="${esc}[31m"
     GREEN="${esc}[32m"
     YELLOW="${esc}[33m"
+    BLUE="${esc}[34m"
+    MAGENTA="${esc}[35m"
+    CYAN="${esc}[36m"
+    GRAY="${esc}[37m"
     BOLD="${esc}[1m"
     UNDERLINE="${esc}[4m"
     NC="${esc}[0m"
@@ -13,9 +18,14 @@ defineColors()
 # unset esc RED GREEN YELLOW BOLD UNDERLINE NC
 
     esc=''
+    BLACK=''
     RED=''
     GREEN=''
     YELLOW=''
+    BLUE=''
+    MAGENTA=''
+    CYAN=''
+    GRAY=''
     BOLD=''
     UNDERLINE=''
     NC=''
