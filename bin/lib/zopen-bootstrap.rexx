@@ -17,8 +17,14 @@ tlsCipherSuiteList = 'C02F' || 'C027' || 'C030'
 tlsCipherSuiteList = tlsCipherSuiteList || 'C028' || '009C' || '009D' || '003C'
 
 rootfs=environment('ZOPEN_ROOTFS')
+if "" = rootfs then
+  rootfs = environment('HOME')"/zopen.dt"
 bootdir=rootfs"/boot"
+cmd = "mkdir -p "bootdir
+dbg("cmd:"cmd";bpxwunix:"bpxwunix(cmd, , out.,err.))
 cachedir=rootfs"/var/cache/zopen"
+cmd = "mkdir -p "cachedir
+dbg("cmd:"cmd";bpxwunix:"bpxwunix(cmd, , out.,err.))
 url = "https://github.com/ZOSOpenTools/curlport/releases/download/"
 url = url||"curlport_420/curl-7.83.1.20230120_231325.zos.pax.Z"
 paxname=SUBSTR(url, 1+LASTPOS('/', url))
@@ -27,7 +33,7 @@ if stream(cachedir||'/'||paxname, "c", "QUERY EXISTS") /= '' then do
   dbg("Using cached version of package")
 end
 else do
-  tmpdir = "/tmp/zopenbs"
+  tmpdir = bootdir
   say "Making temp dir"
   cmd = 'mkdir -p -m 777 '||tmpdir
   cmd
@@ -110,7 +116,7 @@ else do
   call hwtcalls 'on'
   call syscalls 'SIGOFF'
   address hwthttp "hwtconst " "ReturnCode " "DiagArea."
-  dbg( "RC:"rc";ReturnCode:"ReturnCode)
+  if ((rc + ReturnCode) /= 0) then failed("hwtconst")
   /**/  
   ConnectionHandle = ''
   RequestHandle = ''
@@ -126,60 +132,57 @@ else do
   ConnectionHandle = ''
   address hwthttp "hwthinit " "ReturnCode " "HandleType " "HandleOut ",
                   "DiagArea."
-  dbg("RC:"rc";ReturnCode:"ReturnCode)
+  if ((rc + ReturnCode) /= 0) then failed("hwthconn")
   ConnectionHandle = HandleOut
   /**/  
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle " "HWTH_OPT_URI ",
                   "URIAUTH " "DiagArea."
-  dbg("hwthset(HWTH_OPT_URI):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(HWTH_OPT_URI)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_COOKIETYPE " "HWTH_COOKIETYPE_SESSION " "DiagArea."
-  dbg("hwthset(COOKIETYPE):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(COOKIETYPE)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_SNDTIMEOUTVAL " "10 " "DiagArea."
-  dbg("hwthset(SNDTIMEOUTVAL):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(SNDTIMEOUTVAL)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_RCVTIMEOUTVAL " "10 " "DiagArea."
-  dbg("hwthset(RCVTIMEOUTVAL):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(RCVTIMEOUTVAL)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_USE_SSL " "HWTH_SSL_USE " "DiagArea."
-  dbg("hwthset(USE_SSL):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(USE_SSL)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_SSLVERSION " "HWTH_SSLVERSION_TLSv12 " "DiagArea."
-  dbg("hwthset(SSLVERSION):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(SSLVERSION)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_SSLCIPHERSPECS " "tlsCipherSuiteList " "DiagArea."
-  dbg("hwthset(SSLCIPHERSPECS):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(SSLCIPHERSPECS)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_SSLKEYTYPE " "HWTH_SSLKEYTYPE_KEYDBFILE ",
                   "DiagArea."
-  dbg("hwthset(SSLKEYTYPE):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(SSLKEYTYPE)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_SSLKEY " "keydbfile " " DiagArea."
-  dbg("hwthset(SSLKEY/"keydbfile"):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
-  address hwthttp "hwthset " "ReturnCode " "ConnectionHandle "i,
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(SSLKEY:"||keydbfile||")")
+  address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_SSLKEYSTASHFILE " "keydbstash " " DiagArea."
-  dbg("hwthset(SSLKEYSTASHFILE):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(SSLKEYSTASHFILE:"||keydbstash||")")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_MAX_REDIRECTS " "10 " "DiagArea."
-  dbg("hwthset(MAX_REDIRECTS):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(MAX_REDIRECTS)")
   address hwthttp "hwthset " "ReturnCode " "ConnectionHandle ",
                   "HWTH_OPT_XDOMAIN_REDIRECTS " "HWTH_XDOMAIN_REDIRS_ALLOWED ",
                   "DiagArea."
-  dbg("hwthset(XDOMAIN_REDIRECTS):"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+
+  if ((rc + ReturnCode) /= 0) then failed("hwthset(XDOMAIN_REDIRECTS)")
   /**/
   DiagArea.=''
   address hwthttp "hwthconn " "ReturnCode " "ConnectionHandle " "DiagArea. "
-  dbg("hwthconnRC:"rc";ReturnCode:"ReturnCode"(0x"D2X(ReturnCode),
-      ");DiagArea:Service:"DiagArea.Service";ReasonCode:"DiagArea.ReasonCode,
-      ";ReasonDesc:"DiagArea.ReasonDesc)
+  if ((rc + ReturnCode) /= 0) then failed("hwthconn")
   /**/
   RequestHandle = ''
   address hwthttp "hwthinit " "ReturnCode " "HWTH_HANDLETYPE_HTTPREQUEST ",
                   "HandleOut " "DiagArea."
-  dbg("hwthinit:"rc";ReturnCode:"ReturnCode"(0x"D2X(ReturnCode),
-      ");DiagArea:Service:"DiagArea.Service";ReasonCode:"DiagArea.ReasonCode,
-      ";ReasonDesc:"DiagArea.ReasonDesc)
+  if ((rc + ReturnCode) /= 0) then failed("hwthinit")
   RequestHandle = HandleOut
   /**/  
   SList=''
@@ -187,48 +190,54 @@ else do
   SListfn = HWTH_SLST_NEW
   address hwthttp "hwthslst " "ReturnCode " "RequestHandle " "SListfn ",
                   "SList " "header " "DiagArea."
-  dbg("hwthslst:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)");DiagArea:Service:",
-      DiagArea.Service";ReasonCode:"DiagArea.ReasonCode";ReasonDesc:",
-      DiagArea.ReasonDesc)
+  
+  if ((rc + ReturnCode) /= 0) then failed("hwthslst")
   Address hwthttp "hwthset " "ReturnCode " "RequestHandle ",
                   "HWTH_OPT_REQUESTMETHOD " "HWTH_HTTP_REQUEST_GET ",
                   "DiagArea."
-  dbg("hwthttp:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset")
   address hwthttp "hwthset " "ReturnCode " "RequestHandle ",
                   "HWTH_OPT_HTTPHEADERS " "SList " "DiagArea."
-  dbg("hwthslst:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset")
   Address hwthttp "hwthset " "ReturnCode " "RequestHandle ",
                    "HWTH_OPT_URI " "URIPATH " "DiagArea."
-  dbg("hwthslst:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset")
   Address hwthttp "hwthset " "ReturnCode " "RequestHandle ",
                   "HWTH_OPT_TRANSLATE_RESPBODY " "HWTH_XLATE_RESPBODY_NONE ",
                   "DiagArea."
-  dbg("hwthslst:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset")
   address hwthttp "hwthset " "ReturnCode " "RequestHandle ",
                   "HWTH_OPT_RESPONSEHDR_USERDATA " "ResponseHeaders. ",
                   "DiagArea."
-  dbg("hwthslst:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset")
   address hwthttp "hwthset " "ReturnCode " "RequestHandle ",
                   "HWTH_OPT_RESPONSEBODY_USERDATA" "ResponseBody " "DiagArea."
-  dbg("hwthslst:"rc";RC:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthset")
   /**/  
   address hwthttp "hwthrqst " "ReturnCode " "ConnectionHandle ",
-                  "RequestHandle " "HttpStatusCode " "HttpReasonCode "i,
+                  "RequestHandle " "HttpStatusCode " "HttpReasonCode ",
                   "DiagArea."
-  dbg("RC:"rc";ReturnCode:"ReturnCode)
+  if ((rc + ReturnCode) /= 0) then 
+    if (ReturnCode = 4) then
+      dbg("Return Code from Request was WARNING. Continuing")
+    else 
+      failed("hwthrqst")
   /**/  
   forceOption = HWTH_NOFORCE
   address hwthttp "hwthterm " "ReturnCode " "RequestHandle " "forceOption ",
                   "DiagArea."
-  dbg("RC:"rc";ReturnCode:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthterm")
   address hwthttp "hwthdisc " "ReturnCode " "ConnectionHandle " "DiagArea."
-  dbg("RC:"rc";ReturnCode:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthdisc")
   forceOption = HWTH_NOFORCE
   address hwthttp "hwthterm "  "ReturnCode "  "ConnectionHandle ",
                   "forceOption " "DiagArea."
-  dbg("RC:"rc";ReturnCode:"ReturnCode"(0x"D2X(ReturnCode)")")
+  if ((rc + ReturnCode) /= 0) then failed("hwthterm")
+
   filehandle = stream((cachedir||"/"||paxname),'c','open write replace')
+  tracestate=trace n  /* Disable trace - binary blob on response! */
   call charout filehandle, ResponseBody
+  trace tracestate
   call stream filehandle,c,"close"
 end
 say "Expanding curl..."
@@ -244,6 +253,13 @@ parse arg outparams
 if DEBUG = 1 then
   say outparams
 return ''
+
+failed:
+parse arg fn
+  say "Web toolkit function failed: "fn":"rc";RetCode:"ReturnCode"(0x"D2X(ReturnCode),
+  ");SVC:"DiagArea.Service";RSN:"DiagArea.ReasonCode";DSC:"DiagArea.ReasonDesc
+exit -1
+
 
 /*****************************************************/
 /* Github Public Certs for HWT to connect over HTTPS */
