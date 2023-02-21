@@ -49,15 +49,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     "download")
       shift
-      exec "${bindir}/lib/zopen-download" $@
+      exec "${bindir}/lib/zopen-download" -d $@
       ;;
     "install")
       shift
-      exec "${bindir}/lib/zopen-install" $@
+      exec "${bindir}/lib/zopen-download" $@
       ;;
     "upgrade" | "up")
       shift
-      exec "${bindir}/lib/zopen-install" -u $@
+      exec "${bindir}/lib/zopen-download" -u $@
       ;;
     "generate")
       shift

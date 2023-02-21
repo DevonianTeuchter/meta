@@ -129,7 +129,7 @@ while [[ $# -gt 0 ]]; do
   shift;
 done
 
-ZOPEN_CA="${dir}/cacert.pem"
+#ZOPEN_CA="${dir}/cacert.pem"
 
 if ! [ -r "${ZOPEN_CA}" ]; then
   forceUpdate=true 

@@ -235,9 +235,10 @@ else do
   if ((rc + ReturnCode) /= 0) then failed("hwthterm")
 
   filehandle = stream((cachedir||"/"||paxname),'c','open write replace')
-  tracestate=trace n  /* Disable trace - binary blob on response! */
+  tracestate=trace()  /* Disable trace - binary blob on response! */
+  trace o
   call charout filehandle, ResponseBody
-  trace tracestate
+  trace(tracestate)
   call stream filehandle,c,"close"
 end
 say "Expanding curl..."

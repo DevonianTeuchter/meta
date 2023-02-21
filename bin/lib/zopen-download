@@ -41,22 +41,28 @@ getContentsFromGithub()
 
 symlinkIntoSystem(){
   if ! $nosymlink; then
-     printInfo "Integrating package into file system"
+    printInfo "Integrating package into file system"
 
-     printVerbose "Ensuring structure directories exist for integration"
-     basedir=$installdir/$name/
-     target=$ZOPEN_ROOTFS/usr
-     find $basedir -type d | sort -r | while read dir; do
-       dir=$(echo $dir | sed "s#^$basedir##")
-       printVerbose "Found sub-directory: ${dir}; ensuring existance in zopen structure"
-       mkdir -p $target/$dir
-     done
-      printVerbose "Recursively force-link any files in the directories"
-      ln -rfs $basedir $target
-      
-      printVerbose "Cleaning up"
-      # TODO work out nicer mechanism
-      rm -f $target/.env $target/.releaseinfo $target/.zot $target/README.md $target/test.status $target/setup.sh
+    printVerbose "Ensuring structure directories exist for integration"
+    basedir=$installdir/$name/
+    target=$ZOPEN_ROOTFS/usr
+    find $basedir -type d | grep -v ".git" | sort -r | while read dir; do
+      trimdir=$(echo $dir | sed "s#^$basedir##")
+      if [[ ! "x$trimdir" = "x" ]]; then 
+        printVerbose "Found sub-directory: ${trimdir}; ensuring existance in zopen structure as ${target}/${trimdir}"
+        mkdir -p $target/$trimdir
+        printVerbose "Recursively link any files in the directory"
+        find $dir -type f | while read filetolink; do
+          trimfile=$(echo $filetolink | sed "s#^$basedir##")
+          printVerbose "Linking ${filetolink} as ${target}/${trimfile}"
+          ln -fs $filetolink $target/$trimfile
+        done
+      fi
+    done
+    
+    printVerbose "Cleaning up"
+    # TODO work out nicer mechanism
+    rm -f $target/.env $target/.releaseinfo $target/.zot $target/README.md $target/test.status $target/setup.sh
   fi
 }
 
@@ -122,9 +128,10 @@ downloadRepos()
       if ! $localInstall; then
         installdir=$ZOPEN_PKGINSTALL
         paxredirect="-s##$ZOPEN_PKGINSTALL/#"
+        printVerbose "Non-local install, extracting with '$paxredirect'"
       fi
       dirname=${pax%.pax.Z}
-      printVerbose "Check for existing directory for version"
+      printVerbose "Check for existing directory for version '$dirname'"
       if [ -d $installdir/$dirname ]; then 
         printInfo "Removing existing directory and contents"
         rm -rf $installdir/$dirname
@@ -141,7 +148,9 @@ downloadRepos()
         rm -f $installdir/$name
       fi 
 
-      if ! ln -s $installdir/$dirname $installdir/$name; then
+      printVerbose "Calulating package install dir (nover/onlyver/buildver)"
+      actualdir=$(pax -f $pax|tail -n 1|cut -f1 -d'/')
+      if ! ln -s $installdir/$actualdir $installdir/$name; then
         printError "Could not create symbolic link name"
       fi 
 

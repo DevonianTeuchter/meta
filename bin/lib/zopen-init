@@ -110,6 +110,13 @@ echo "export ZOPEN_ROOTFS=$rootfs" > "$HOME/.zopen-config"
 
 # Add the profiled processing first so the zopen paths are added first
 cat << EOF >>  "$HOME/.zopen-config"
+sanitizeEnvVar(){
+  #remove any envvar entries that match the specified regex
+  value=\$1
+  delim=\$2
+  prefix=\$3
+  echo "\$value" | awk -v RS="\$delim" -v DLIM="\$delim" -v PRFX="\$prefix" '{ if (match(\$1, PRFX)==0) {printf("%s%s",\$1,DLIM)}}'
+}
 $zopen_oauth
 if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
   for FILE in \$( find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print )
@@ -122,12 +129,13 @@ EOF
 echo "export ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall" >> "$HOME/.zopen-config"
 echo "export ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/" >> "$HOME/.zopen-config"
 echo "export ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"  >> "$HOME/.zopen-config"
-echo "export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$PATH"  >> "$HOME/.zopen-config"
-echo "export LIBPATH=\$ZOPEN_ROOTFS/usr/lib"  >> "$HOME/.zopen-config"
+echo "export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar "\$PATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")"  >> "$HOME/.zopen-config"
+echo "export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")  >> "$HOME/.zopen-config"
+echo "export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar "\$MANPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")  >> "$HOME/.zopen-config"
 
 printInfo "Created config in $HOME/.zopen-config. Updating environment"
 . "$HOME/.zopen-config"
-
+printInfo "Root FS available at $ZOPEN_ROOTFS"
 printInfo "Running bootstrap"
 runAndLog "${utildir}/zopen-bootstrap.rexx"
 printVerbose "Downloaded bootstrapped curl. Configuring for use"
@@ -142,8 +150,9 @@ cd $curwd
 
 printInfo "Updating CA cert"
 runAndLog "${utildir}/zopen-update-cacert -v -i -f"
-
-runAndLog "${utildir}/zopen-download git -v"
+runAndLog "${utildir}/zopen-download curl -v"
 printInfo "Merging meta package into zopen system"
 runAndLog "${utildir}/zopen-download meta -v"
+printInfo "Initialisation complete."
+
 

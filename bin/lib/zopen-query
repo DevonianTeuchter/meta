@@ -41,55 +41,74 @@ getContentsFromGithub()
 
 printDetailListEntries()
 {
-  printVerbose "Checking repoArray: $repoArray"
-  printf "${NC}${UNDERLINE}${1}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Your version" "Latest Tag" "Status" "Quality"
-  echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
-    name=${repo%port}
-    if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
-      exit 4;
-    fi
-    #FIXME: use jq to parse
-    latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
-    statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
-    buildQuality="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>##" -e "s#[ ]*(.*##" | tr -d ' ')"
-    testStatus="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>[^(]*(##" -e "s#).*##")"
-    if [ -z "$buildQuality" ]; then
-      buildQuality="Untested"
-      testStatus="N/A";
-    fi
-    if [ ! -z "$filter" ]; then
-      qualityLower=$(echo "$buildQuality" | awk '{print tolower($0)}')
-      if [ "$filter" != "$qualityLower" ]; then
-        continue;
+  details=$1
+  if [[ $details -eq 0 ]]; then
+    printf "${NC}${UNDERLINE}${1}%-20s %-20s %-20s\n${NC}" "Repo" "Your version" "Latest Tag"
+    echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
+      name=${repo%port}
+      if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+        exit 4;
       fi
-    fi
+      #FIXME: use jq to parse
+      latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+      if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
+        originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
+      else
+        originalTag="Not installed"
+      fi
+      printf "%-20s %-20s %-20s\n" "$repo" "$originalTag" "$latestTag" 
+    done
+  else
+    printVerbose "Checking repoArray: $repoArray"
+    printf "${NC}${UNDERLINE}${1}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Your version" "Latest Tag" "Status" "Quality"
+    echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
+      name=${repo%port}
+      if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+        exit 4;
+      fi
+      #FIXME: use jq to parse
+      latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+      statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
+      buildQuality="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>##" -e "s#[ ]*(.*##" | tr -d ' ')"
+      testStatus="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>[^(]*(##" -e "s#).*##")"
+      if [ -z "$buildQuality" ]; then
+        buildQuality="Untested"
+        testStatus="N/A";
+      fi
+      if [ ! -z "$filter" ]; then
+        qualityLower=$(echo "$buildQuality" | awk '{print tolower($0)}')
+        if [ "$filter" != "$qualityLower" ]; then
+          continue;
+        fi
+      fi
 
-    if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
-      originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
-    else
-      originalTag="Not installed"
-    fi
-    printf "%-20s %-20s %-20s " "$repo" "$originalTag" "$latestTag" 
-     case $buildQuality in
-    "Green")
-      printf "${NC}${GREEN}${1}%-10s${NC}" "$buildQuality"
-      ;;
-      "Red" | "Untested" | "Skipped" )
-      printf "${NC}${RED}${1}%-10s${NC}" "$buildQuality"
-      ;;
-      "Blue")
-      printf "${NC}${BLUE}${1}%-10s${NC}" "$buildQuality"
-      ;;
-      "Yellow")
-      printf "${NC}${YELLOW}${1}%-10s${NC}" "$buildQuality"
-      ;;
-      *)
-      printf "%-10s" "$buildQuality"
-      ;;
-     esac
-    printf " %-25s\n"  "$testStatus"
-    continue;   
-  done
+      if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
+        originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
+      else
+        originalTag="Not installed"
+      fi
+      printf "%-20s %-20s %-20s " "$repo" "$originalTag" "$latestTag" 
+       case $buildQuality in
+      "Green")
+        printf "${NC}${GREEN}${1}%-10s${NC}" "$buildQuality"
+        ;;
+        "Red" | "Untested" | "Skipped" )
+        printf "${NC}${RED}${1}%-10s${NC}" "$buildQuality"
+        ;;
+        "Blue")
+        printf "${NC}${BLUE}${1}%-10s${NC}" "$buildQuality"
+        ;;
+        "Yellow")
+        printf "${NC}${YELLOW}${1}%-10s${NC}" "$buildQuality"
+        ;;
+        *)
+        printf "%-10s" "$buildQuality"
+        ;;
+       esac
+      printf " %-25s\n"  "$testStatus"
+      continue;   
+    done
+  fi
   exit 0
 }
 printInstalledEntries(){
