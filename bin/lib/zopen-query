@@ -16,7 +16,7 @@ printSyntax()
   echo "  -i : --installed: list install z/OS Open Tools." >&2
 #TODO echo " --upgradeable: list packages where an upgrade is available." >&2
 #TODO echo "  --provides: list the files that an installed package provides." >&2
-#TODO  echo "  --whatprovides: which installed package provided a file." >&2
+  echo "  -wp : --whatprovides: which installed package provided a file." >&2
   echo "  -v: run in verbose mode." >&2
   echo "  -d | --details: include full details for listings." >&2
   echo "  --filter <color>: apply filter based on quality (green - all tests passing, blue - most tests passing, yellow - some tests passing, red - no tests passing, or skipped (no filter by default))"  >&2
