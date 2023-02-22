@@ -117,18 +117,19 @@ installDependencies()
     
     # Remove an old one if it exists
     rm -f "${name}/.depsenv"
+    varName=$(echo "$name" | sed -e "s/-/_/g")
     cat <<ZZ >> "${name}/.depsenv"
-${name}_originalDir="\$OLDPWD"
+${varName}_originalDir="\$OLDPWD"
 ZZ
     echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
       cat <<ZZ >> "${name}/.depsenv"
 if [ -f "../${dep}/.env" ]; then
   if [[ \$(type echo) == 'echo is a shell builtin' ]]; then
-    pushd "../${dep}"
+    pushd "../${dep}" >/dev/null
     . ./.env
-    popd
+    popd >/dev/null
   else
-    cd "../${dep}" && . ./.env; cd -
+    cd "../${dep}" && . ./.env; cd - >/dev/null
   fi
 fi
 ZZ
@@ -136,7 +137,7 @@ ZZ
     done
 
     cat <<ZZ >> "${name}/.depsenv"
-OLDPWD="\$${name}_originalDir"
+OLDPWD="\$${varName}_originalDir"
 ZZ
   fi
 )
@@ -216,18 +217,29 @@ installPort()
     printError "${pax} was not actually downloaded?"
   fi
 
-  dirname=${pax%.pax.Z}
+  # get extracted directory
+  dirname=$(pax -vf $pax -o listopt="%(name)s" | head -1 | sed -e "s#/\$##")
+  printVerbose "Directory name: $dirname"
   if [ -d "$dirname" ]; then
     printInfo "Deleting existing $dirname..."
     rm -rf "$dirname"
   fi
-
+  
   printInfo "Extracting $pax..."
   if ! runAndLog "pax -rf $pax -p p ${redirectToDevNull}"; then
     printWarning "Could not extract $pax. Skipping"
     continue;
   fi
   rm -f "${pax}"
+
+  newDir=$(echo "$dirname" | sed -e "s/\.202[0-9]*_[0-9]*\.zos//g" -e "s/\.zos//g")
+  # Using new directory name
+  if [ "$newDir" != "$dirname" ]; then
+    printVerbose "Moving $dirname to $newDir"
+    rm -rf "$newDir"
+    mv "$dirname" "$newDir"
+    dirname="$newDir"
+  fi
 
   # Remove old symlink and recreate
   if [ -L $name ]; then
@@ -243,6 +255,7 @@ installPort()
 
   # Delete the .installed file if it was previously there
   rm -f "${name}/.installed"
+  rm -f "${name}/.replacedpath"
 
   printVerbose "Installing ${name}..."
   if ! $downloadOnly; then

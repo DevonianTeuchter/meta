@@ -78,7 +78,7 @@ printVerbose()
 
 printHeader()
 {
-  printColors "${NC}${UNDERLINE}${1}...${NC}" >&2
+  printColors "${NC}${YELLOW}${BOLD}${UNDERLINE}${1}${NC}" >&2
 }
 
 runAndLog()

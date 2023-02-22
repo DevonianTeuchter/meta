@@ -725,7 +725,7 @@ extractTarBall()
 
   printInfo "Extract tarball ${tarballz} into ${dir}"
 
-  tar -axf "${tarballz}"  
+  tar -axmf "${tarballz}"
   if [ $? -gt 0 ]; then
     printError "Unable to untar ${tarballz}"
   fi
@@ -1180,22 +1180,31 @@ zz
 
   if $hasHardcodedPaths; then
     cat <<zz >>"${ZOPEN_INSTALL_DIR}/setup.sh"
+if [ -f .replacedpath ]; then
+  REPLACE_ROOT_PATH="\$(cat .replacedpath | head -1)"
+  REPLACE_PREFIX_PATH="\$(cat .replacedpath | head -2 | tail -1)"
+else
+  REPLACE_ROOT_PATH="ZOPEN_INSTALL_ROOT"
+  REPLACE_PREFIX_PATH="ZOPEN_INSTALL_PREFIX"
+fi
 ZOPEN_INSTALL_PREFIX="\$${projectName}_HOME/../"
 ZOPEN_INSTALL_PREFIX=\$(cd "\${ZOPEN_INSTALL_PREFIX}" >/dev/null 2>&1 && pwd -P)
-for f in \$(/bin/find \$${projectName}_HOME/ -type f | /bin/xargs grep -l \"ZOPEN_INSTALL_ROOT\" 2>/dev/null); do
+for f in \$(/bin/find \$${projectName}_HOME/ -type f | /bin/xargs grep -l \"\$REPLACE_ROOT_PATH\" 2>/dev/null); do
   if [ \"\$f\" != \"\$${projectName}_HOME/setup.sh\" ] && [ \"\$f\" != \"\$${projectName}_HOME/.env\" ]; then
     cp \$f \$f.tmp
-    /bin/sed -e \"s#ZOPEN_INSTALL_ROOT#\$${projectName}_HOME#g\" \$f.tmp > \$f
+    /bin/sed -e \"s#\$REPLACE_ROOT_PATH#\$${projectName}_HOME#g\" \$f.tmp > \$f
     rm \$f.tmp;
   fi
 done
-for f in \$(/bin/find \$${projectName}_HOME/ -type f | /bin/xargs grep -l \"ZOPEN_INSTALL_PREFIX\" 2>/dev/null); do
+for f in \$(/bin/find \$${projectName}_HOME/ -type f | /bin/xargs grep -l \"\$REPLACE_PREFIX_PATH\" 2>/dev/null); do
   if [ \"\$f\" != \"\$${projectName}_HOME/setup.sh\" ] && [ \"\$f\" != \"\$${projectName}_HOME/.env\" ]; then
     cp \$f \$f.tmp
-    /bin/sed -e \"s#ZOPEN_INSTALL_PREFIX#\${ZOPEN_INSTALL_PREFIX}#g\" \$f.tmp > \$f
+    /bin/sed -e \"s#\$REPLACE_PREFIX_PATH#\${ZOPEN_INSTALL_PREFIX}#g\" \$f.tmp > \$f
     rm \$f.tmp;
   fi
 done
+echo "\$${projectName}_HOME" > .replacedpath
+echo "\${ZOPEN_INSTALL_PREFIX}" >> .replacedpath
 zz
   fi
 
@@ -1241,6 +1250,11 @@ install()
       zopen_pre_install ${ZOPEN_INSTALL_DIR}
     fi
 
+    # Delete the existing hidden files
+    rm -f "${ZOPEN_INSTALL_DIR}/.releaseinfo"
+    rm -f "${ZOPEN_INSTALL_DIR}/.installed"
+    rm -f "${ZOPEN_INSTALL_DIR}/.replacedpath"
+
     printHeader "Running Install"
     installlog="${ZOPEN_LOG_DIR}/${LOG_PFX}_install.log"
     create_fifo_pipe "${installlog}"
@@ -1258,9 +1272,8 @@ install()
     createReadme
 
     # Store test.status into installed dir and build dir for cicd
-    touch "${ZOPEN_INSTALL_DIR}/test.status"
-    chtag -tc 819 "${ZOPEN_INSTALL_DIR}/test.status"
-    echo "$ZOPEN_STATUS" > "${ZOPEN_INSTALL_DIR}/test.status"
+    asciiecho "$ZOPEN_STATUS" "${ZOPEN_ROOT}/install/test.status"
+    cp "${ZOPEN_ROOT}/install/test.status" "${ZOPEN_INSTALL_DIR}/test.status"
 
     if [ -z "$(command -v zopen_get_version)" ]; then
       printWarning "A zopen_get_version() function should be defined in the buildenv to extract the version contents"
@@ -1289,10 +1302,12 @@ install()
         printError "$versionString uses an invalid version format"
       fi 
       asciiecho "$versionString" "${ZOPEN_INSTALL_DIR}/.version"
+      cp "${ZOPEN_INSTALL_DIR}/.version" "${ZOPEN_ROOT}/install/"
     fi
 
     if [ ! -z "$ZOPEN_RUNTIME_DEPS" ]; then
       asciiecho "$(echo "$ZOPEN_RUNTIME_DEPS" | xargs | tr ' ' '\n' | sort -u | xargs)" "${ZOPEN_INSTALL_DIR}/.runtimedeps"
+      cp "${ZOPEN_INSTALL_DIR}/.runtimedeps" "${ZOPEN_ROOT}/install/"
     fi
 
     buildDeps=""
@@ -1302,6 +1317,9 @@ install()
         buildDeps="${ZOPEN_GIT_DEPS}"
     fi
     asciiecho "$(echo "$buildDeps" | xargs | tr ' ' '\n' | sort -u | xargs)" "${ZOPEN_INSTALL_DIR}/.builddeps"
+    cp "${ZOPEN_INSTALL_DIR}/.builddeps" "${ZOPEN_ROOT}/install/"
+
+    asciiecho "$LOG_PFX" "${ZOPEN_INSTALL_DIR}/.buildtimestamp"
 
     if $generatePax; then
       printHeader "Generating pax.Z from ${ZOPEN_INSTALL_DIR}"
@@ -1411,7 +1429,7 @@ resolveCommands()
     esac
     [[ -d ${ZOPEN_ROOT}/install ]] || mkdir -p ${ZOPEN_ROOT}/install
     paxFileName="${ZOPEN_ROOT}/install/${ZOPEN_NAME}.${LOG_PFX}.zos.pax.Z"
-    export ZOPEN_PAX_CMD="pax -w -z -x pax \"-s#${ZOPEN_INSTALL_DIR}/#${ZOPEN_NAME}.${LOG_PFX}.zos/#\" -f \"${paxFileName}\" \"${ZOPEN_INSTALL_DIR}/\""
+    export ZOPEN_PAX_CMD="pax -w -z -x pax \"-s#${ZOPEN_INSTALL_DIR}/#${ZOPEN_NAME}/#\" -f \"${paxFileName}\" \"${ZOPEN_INSTALL_DIR}/\""
     if $generateSymLink; then
       PROJECT_NAME="$(echo ${ZOPEN_NAME} | cut -d'-' -f1)"
       if [ "${PROJECT_NAME}" != "${ZOPEN_NAME}" ]; then
