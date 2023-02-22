@@ -129,9 +129,9 @@ EOF
 echo "export ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall" >> "$HOME/.zopen-config"
 echo "export ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/" >> "$HOME/.zopen-config"
 echo "export ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"  >> "$HOME/.zopen-config"
-echo "export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar "\$PATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")"  >> "$HOME/.zopen-config"
-echo "export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")  >> "$HOME/.zopen-config"
-echo "export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar "\$MANPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")  >> "$HOME/.zopen-config"
+echo "export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")"  >> "$HOME/.zopen-config"
+echo "export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")"  >> "$HOME/.zopen-config"
+echo "export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")"  >> "$HOME/.zopen-config"
 
 printInfo "Created config in $HOME/.zopen-config. Updating environment"
 . "$HOME/.zopen-config"

@@ -18,6 +18,7 @@ printSyntax()
   echo " query: queries zOpen Tool packages" >&2
   echo " remove: removes installed zOpen Tool packages" >&2
   echo " alt: switch local versions of zOpen Tool packages" >&2
+  echo " clean: cleans various aspects of zOpen Tool packages" >&2
   echo "" >&2
 }
 
@@ -86,6 +87,10 @@ while [[ $# -gt 0 ]]; do
     "alt" | "-a")
       shift
       exec "${bindir}/lib/zopen-alt" $@
+      ;;
+    "clean")
+      shift
+      exec "${bindir}/lib/zopen-clean" $@
       ;;
     "help" | "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
       printHelp "${args}"
