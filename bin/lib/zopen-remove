@@ -17,7 +17,7 @@ printSyntax()
 }
 
 unsymlinkFromSystem(){
-  printVerbose "Removing orphaned symlinks from the usr file structure"
+  printInfo "Removing dangling symlinks from the file structure"
   find $ZOPEN_ROOTFS/usr/ -type l -exec test ! -e {} \; -print | while read sl; do
     printVerbose "Removing symlink '$sl'"
     rm -f $sl
@@ -26,7 +26,7 @@ unsymlinkFromSystem(){
 
 removePackageDirectories(){
   pkg=$1
-  printVerbose "Finding and removing any directories associated with package"
+  printInfo "Removing any directories associated with package"
   find $ZOPEN_ROOTFS/usr/ -type d -name $pkg -print | while read rmdir; do
     printVerbose "Removing orphaned directory: $rmdir"  
     rm -rf $rmdir
@@ -40,18 +40,19 @@ removePackages(){
     else
       deref=$(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P | awk -F/ '{ print $(NF)}')
       if $purge; then
-        printVerbose "Need to remove the symlink and the versioned directory"
+        printVerbose "Need to remove the symlinks and the versioned directory"
         rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
       else
         printVerbose "Removing metadata file to mark uninstall"
         rm -f $ZOPEN_PKGINSTALL/$pkg/.installed
       fi
-      printVerbose "Breaking/removing the link from current to versioned"
+      printInfo "Breaking link from current to versioned"
       rm -f $ZOPEN_PKGINSTALL/$pkg/
-      printVerbose "Removing any profiled processing"
+      printInfo "Removing profiled processing"
       [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
       unsymlinkFromSystem
       removePackageDirectories $pkg
+      printInfo "${NC}${GREEN}Successfully removed $name${NC}"
     fi
   done
 }

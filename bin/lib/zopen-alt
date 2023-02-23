@@ -38,21 +38,19 @@ symlinkIntoSystem(){
         nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
         flecnt=0
         pct=0
-        ansiupdate 3 -30 "${ERASE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+        ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
         echo "$filestolink" | while read filetolink; do
           flecnt=$(expr $flecnt + 1)
           pct=`expr $flecnt \* 100`
           pct=`expr $pct / $nfiles`
-          ansiupdate 3 -30 "${ERASE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+          ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
           trimfile=$(echo $filetolink | sed "s#^$basedir##")
           ln -fs $filetolink $target/$trimfile
         done
       fi
     done
-    ansiupdate 3 -30 "${ERASE}Processed ${ndirs} of ${ndirs}"
+    ansiupdate 3 -30 "${ERASELINE}Processed ${ndirs} of ${ndirs}"
     printInfo "Integration complete"
-  else
-    printInfo "BORK!"
   fi
 }
 
@@ -87,6 +85,7 @@ setAlt(){
       if ! ln -sf $newver $ZOPEN_PKGINSTALL/$needle; then
         printError "Could not create symbolic link name"
       fi
+      touch "${ZOPEN_PKGINSTALL}/${needle}/.installed"
       symlinkIntoSystem $needle
     else
       printInfo "Selection is already current version."
@@ -97,7 +96,7 @@ setAlt(){
 listAlts(){
   sett=$1
   needle=$2
-  found=$(find $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d  | grep "/${needle}-[^/]*")
+  found=$(find $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d -o -type l | grep "/${needle}-[^/]*")
   if [[ -z $found ]]; then
     printInfo "No currently installed version of package '${needle}'"
     exit 4

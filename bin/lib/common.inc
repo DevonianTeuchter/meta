@@ -3,7 +3,8 @@ defineANSI()
 {
   # Standard tty codes
   ESC="\047"
-  ERASE="${ESC}[K"
+  ERASELINE="${ESC}[2K"
+
   # Color-type codes, needs explicit terminal settings
   if [ ! "${_BPX_TERMPATH-x}" = "OMVS" ] && [ -z "${NO_COLOR}" ] && [ ! "${FORCE_COLOR-x}" = "0" ] && [ -t 1 ] && [ -t 2 ]; then
     esc="\047"
@@ -189,6 +190,14 @@ printWarning()
 printInfo()
 {
   printColors "$1" >&2
+}
+
+getInputHidden()
+{
+  stty -echo
+  read zopen_input
+  echo $zopen_input
+  stty echo
 }
 
 getInput()

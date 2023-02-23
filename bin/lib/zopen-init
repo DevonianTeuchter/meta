@@ -7,7 +7,6 @@ if [ -z "$utildir" ]; then
 fi
 . "${utildir}/common.inc"
 
-
 printSyntax() 
 {
   args=$*
@@ -68,9 +67,12 @@ if [ -z "$rootfs" ]; then
 fi
 
 echo "Enter the github oauth token for use in zopen-download. If none, press enter"
-zopen_oauth=$(getInput)
+zopen_oauth=$(getInputHidden)
 if [ ! -z "$zopen_oauth" ]; then
   zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$zopen_oauth"
+else
+  # Placeholder in the .zopen-config
+  zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN="
 fi
 
 printInfo "Populating standard file system"
