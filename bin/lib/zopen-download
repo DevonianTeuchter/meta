@@ -43,24 +43,34 @@ symlinkIntoSystem(){
   if ! $nosymlink; then
     printInfo "Integrating package into file system"
 
-    printVerbose "Ensuring structure directories exist for integration"
     basedir=$installdir/$name/
     target=$ZOPEN_ROOTFS/usr
-    find $basedir -type d | grep -v ".git" | sort -r | while read dir; do
+    dirs=$(find $basedir -type d | grep -v ".git" | sort -r)
+    ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
+    dircnt=0
+    echo "  ${dircnt}/${ndirs}   0%"
+    echo "$dirs" | while read dir; do
+      dircnt=$(expr $dircnt + 1)
       trimdir=$(echo $dir | sed "s#^$basedir##")
       if [[ ! "x$trimdir" = "x" ]]; then 
-        printVerbose "Found sub-directory: ${trimdir}; ensuring existance in zopen structure as ${target}/${trimdir}"
         mkdir -p $target/$trimdir
-        printVerbose "Recursively link any files in the directory"
-        find $dir -type f | while read filetolink; do
+        filestolink=$(find $dir -type f)
+        nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
+        flecnt=0
+        pct=0
+        ansiupdate 3 -30 "${ERASE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+        echo "$filestolink" | while read filetolink; do
+          flecnt=$(expr $flecnt + 1)
+          pct=`expr $flecnt \* 100`
+          pct=`expr $pct / $nfiles`
+          ansiupdate 3 -30 "${ERASE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
           trimfile=$(echo $filetolink | sed "s#^$basedir##")
-          printVerbose "Linking ${filetolink} as ${target}/${trimfile}"
           ln -fs $filetolink $target/$trimfile
         done
       fi
     done
-    
-    printVerbose "Cleaning up"
+    ansiupdate 3 -30 "${ERASE}Processed ${ndirs} of ${ndirs}"
+    printInfo "Integration complete"
   fi
 }
 
@@ -71,26 +81,30 @@ installDependencies()
   dependencies=$2
   if [ "$dependencies" != "No dependencies" ]; then
     printHeader "Installing dependencies for $name: $dependencies..."
-    
-    # Remove an old one if it exists
-    rm -f "${name}/.depsenv"
-    varName=$(echo "$name" | sed -e "s/-/_/g")
-    cat <<ZZ >> "${name}/.depsenv"
-${varName}_originalDir="\$OLDPWD"
-ZZ
     echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
-      cat <<ZZ >> "${name}/.depsenv"
-if [ -f "../${dep}/.env" ]; then
-  if [[ \$(type echo) == 'echo is a shell builtin' ]]; then
-    pushd "../${dep}" >/dev/null
-    . ./.env
-    popd >/dev/null
-  else
-    cd "../${dep}" && . ./.env; cd - >/dev/null
-  fi
-fi
-ZZ
-      installPorts $dep
+#TODO WOrk out why the need for the heredoc!  
+# [track already installed packages? attempting an install would just fail if already installed?]
+# [track cyclic dependancies? [most likely!]
+ 
+#    # Remove an old one if it exists
+#    rm -f "${name}/.depsenv"
+#    varName=$(echo "$name" | sed -e "s/-/_/g")
+#    cat <<ZZ >> "${name}/.depsenv"
+#${varName}_originalDir="\$OLDPWD"
+#ZZ
+#    echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
+#      cat <<ZZ >> "${name}/.depsenv"
+#if [ -f "../${dep}/.env" ]; then
+#  if [[ \$(type echo) == 'echo is a shell builtin' ]]; then
+#    pushd "../${dep}" >/dev/null
+#    . ./.env
+#    popd >/dev/null
+#  else
+#    cd "../${dep}" && . ./.env; cd - >/dev/null
+#  fi
+#fi
+#ZZ
+      installPort $dep
     done
 
     cat <<ZZ >> "${name}/.depsenv"
@@ -104,7 +118,7 @@ installPort()
   name=$1
   repo="${name}port"
 
-  printHeader "Preparing to download $name from $repo"
+  printHeader "Processing package: $name"
   if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
     exit 4;
   fi
@@ -113,24 +127,37 @@ installPort()
     printInfo "No releases published for $name"
     continue
   fi
+
   statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
 
-    latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
-    if $upgradeInstalled || $installOrUpgrade; then
-      if [ -e "${ZOPEN_PKGINSTALL}/${name}/.zot" ]; then
-        originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
-        printVerbose "originalTag = $originalTag"
-      elif ! $installOrUpgrade; then
-        # We're only updating already installed products
-        printVerbose "${downloadDir}/${name} will not be upgraded as it is not installed."
-        continue;
-      fi
-      if [ "${latestTag}" = "${originalTag}" ] && ! $reinstall; then
-        printVerbose "${downloadDir}/${name} with latest release tag \"${latestTag}\" already installed. Skipping..."
-        continue;
-      fi
-      printInfo "New release with tag \"${latestTag}\" found for $repo"
+  latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+  printInfo "Release with tag \"${latestTag}\" found for ${name}"
+  originalTag=""
+  printVerbose "Checking for meta file at: ${ZOPEN_PKGINSTALL}/${name}/.zot"
+  if [ -e "${ZOPEN_PKGINSTALL}/${name}/.zot" ]; then
+    originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
+    printVerbose "Found originalTag = $originalTag"
+  else
+    printVerbose "Could not detect existing installation at ${ZOPEN_PKGINSTALL}/${name}"
+  fi
+  printVerbose "Latest tag=${latestTag};Original=${originalTag};${originalTag};${latestTag};${upgradeInstalled};${installOrUpgrade};${reinstall}"
+  if [ "${latestTag}" = "${originalTag}" ]; then
+    if ! $reinstall; then
+      printInfo "Package ${name} with latest release tag \"${latestTag}\" already installed."
+      continue;
     fi
+    printInfo "Reinstalling current version of ${name} with release tag \"${originalTag}\"..."
+  fi
+  printVerbose "Checking if package is not installed but scheduled for upgrade"
+  if [ "x" = "x$originalTag" ]; then
+    if $upgradeInstalled; then
+      printError "Package ${name} can not be upgraded as it is not installed!"
+      continue;
+    fi
+    printInfo "Installing ${name}..."
+  else
+    printInfo "Replacing ${name} version \"${originalTag}\" with \"${latestTag}\""
+  fi
 
     latest_url="$(echo "$contents" | grep "\"browser_download_url\":" | cut -d '"' -f 4)"
     printVerbose "Checking cache for already downloaded package [file name comparison]"
@@ -233,20 +260,15 @@ if [ -f ".env" ]; then
 fi
 cd \$curdir  >/dev/null 2>&1
 EOF
-        printVerbose "Sourcing .env - change to install dir and back, no subshell"
-        currDir=$(pwd)
-        cd "$installdir/$name"
-        . .env
-        cd $currDir
-        
+        printVerbose "Re-sourcing environment"
+        . $HOME/.zopen-config
       fi
     fi
-    printInfo "Successfully downloaded $name"
-  
+    printInfo "Successfully installed $name"
 )
 
 installPorts()
-{
+(
   echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
     name=${repo%port}
     if ! latest_url="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
@@ -255,7 +277,7 @@ installPorts()
 
     installPort $name
   done
-}
+)
 # Main code start here
 args=$*
 upgradeInstalled=false

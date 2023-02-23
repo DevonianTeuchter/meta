@@ -1,8 +1,12 @@
 #!/bin/sh
-defineColors() 
+defineANSI() 
 {
+  # Standard tty codes
+  ESC="\047"
+  ERASE="${ESC}[K"
+  # Color-type codes, needs explicit terminal settings
   if [ ! "${_BPX_TERMPATH-x}" = "OMVS" ] && [ -z "${NO_COLOR}" ] && [ ! "${FORCE_COLOR-x}" = "0" ] && [ -t 1 ] && [ -t 2 ]; then
-    esc="\047"
+    esc="${ESC}"
     BLACK="${esc}[30m"
     RED="${esc}[31m"
     GREEN="${esc}[32m"
@@ -30,6 +34,52 @@ defineColors()
     UNDERLINE=''
     NC=''
   fi
+}
+ansiupdate(){
+  deltax=$1
+  deltay=$2
+  echostr=$3
+  #crsrSetPos $x $y
+  if [ $deltax -gt 0 ]; then
+    crsrUp $deltax
+  elif [ $deltax -lt 0 ]; then
+    crsrDown $(expr $deltax \* -1)
+  fi
+  if [ $deltay -gt 0 ]; then
+    crsrRight $deltay
+  elif [ $deltay -lt 0 ]; then
+    crsrLeft $(expr $deltay \* -1)
+  fi
+ /bin/echo "${echostr}"
+}
+crsrGetPos(){
+# TODO
+    /bin/echo "\027[6n"            # ask the terminal for the position
+    read foo              # store the position in bash variable 'foo'
+    /bin/echo "Current position: >>${foo}<<"
+}
+crsrSetPos(){
+#TODO
+  x=$1
+  y=$2
+  /bin/echo "${ESC}[${y};${x}H"
+}
+
+crsrUp(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}A"
+}
+crsrDown(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}B"
+}
+crsrRight(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}C"
+}
+crsrLeft(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}D"
 }
 
 defineEnvironment()
@@ -65,7 +115,7 @@ printColors()
 zopenInitialize()
 {
   defineEnvironment
-  defineColors
+  defineANSI
   processConfig
 }
 

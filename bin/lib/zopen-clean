@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 # Cleanup utility for z/OS Open Tools - https://github.com/ZOSOpenTools
 
 export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
