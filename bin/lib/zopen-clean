@@ -13,7 +13,7 @@ printSyntax()
   echo "  where <option> may be one or more of:" >&2
   echo "      -u : --unused: removes unused package versions" >&2
   echo "      -d : --dangling: removes dangling symlinks" >&2
-  echo "TODO  -c : --cache: cleans package cache" >&2
+  echo "      -c : --cache: cleans package cache" >&2
   echo "      -a : --all:  equivalent to -u -d -c" 
   echo "  -v: run in verbose mode." >&2
   echo "TODO and <package> is a package name." >&2

@@ -35,7 +35,7 @@ removePackageDirectories(){
 removePackages(){
   pkglist=$1
   echo "$pkglist" | xargs | tr ' ' '\n' | sort | while read pkg; do
-    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.zot ]; then 
+    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.installed ] && ! $silent; then 
       printInfo "Package '$pkg' is not installed"
     else
       deref=$(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P | awk -F/ '{ print $(NF)}')
@@ -44,7 +44,7 @@ removePackages(){
         rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
       else
         printVerbose "Removing metadata file to mark uninstall"
-        rm -f $ZOPEN_PKGINSTALL/$pkg/.zot
+        rm -f $ZOPEN_PKGINSTALL/$pkg/.installed
       fi
       printVerbose "Breaking/removing the link from current to versioned"
       rm -f $ZOPEN_PKGINSTALL/$pkg/
@@ -60,6 +60,7 @@ removePackages(){
 args=$*
 
 verbose=false
+silent=false
 purge=false
 chosenRepos=""
 while [[ $# -gt 0 ]]; do
@@ -70,6 +71,9 @@ while [[ $# -gt 0 ]]; do
     "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
       printSyntax "${args}"
       exit 4
+      ;;
+    "-s" | "--silent")
+      silent=true
       ;;
     "-v" | "--v" | "-verbose" | "--verbose")
       verbose=true

@@ -6,7 +6,7 @@ defineANSI()
   ERASE="${ESC}[K"
   # Color-type codes, needs explicit terminal settings
   if [ ! "${_BPX_TERMPATH-x}" = "OMVS" ] && [ -z "${NO_COLOR}" ] && [ ! "${FORCE_COLOR-x}" = "0" ] && [ -t 1 ] && [ -t 2 ]; then
-    esc="${ESC}"
+    esc="\047"
     BLACK="${esc}[30m"
     RED="${esc}[31m"
     GREEN="${esc}[32m"

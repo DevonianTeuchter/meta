@@ -14,8 +14,9 @@ printSyntax()
   echo " generate: generate a zopen project" >&2
   echo " update-cacert: update the cacert.pem file" >&2
   echo " upgrade: upgrades already installed tools" >&2
-  echo " list: lists currently available zOpen Tool packages" >&2
-  echo " query: queries zOpen Tool packages" >&2
+  echo " list: lists information about zOpen Tool packages" >&2
+  echo " query: queries zOpen Tool packages (see " >&2
+  echo " search: searches remote repo for zOpen Tool package" >&2
   echo " remove: removes installed zOpen Tool packages" >&2
   echo " alt: switch local versions of zOpen Tool packages" >&2
   echo " clean: cleans various aspects of zOpen Tool packages" >&2
@@ -79,6 +80,10 @@ while [[ $# -gt 0 ]]; do
     "query" | "-q")
       shift
       exec "${bindir}/lib/zopen-query" $@
+      ;;
+    "search" | "-s")
+      shift
+      exec "${bindir}/lib/zopen-query" --remote-search $@
       ;;
     "remove" | "-r" | "uninstall" | "un" | "erase" | "e")
       shift

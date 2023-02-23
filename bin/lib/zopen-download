@@ -133,9 +133,9 @@ installPort()
   latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
   printInfo "Release with tag \"${latestTag}\" found for ${name}"
   originalTag=""
-  printVerbose "Checking for meta file at: ${ZOPEN_PKGINSTALL}/${name}/.zot"
-  if [ -e "${ZOPEN_PKGINSTALL}/${name}/.zot" ]; then
-    originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
+  printVerbose "Checking for meta file at: ${ZOPEN_PKGINSTALL}/${name}/.releaseinfo"
+  if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
+    originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
     printVerbose "Found originalTag = $originalTag"
   else
     printVerbose "Could not detect existing installation at ${ZOPEN_PKGINSTALL}/${name}"
@@ -244,7 +244,6 @@ installPort()
 
       # Add tag information as a .releaseinfo file
       echo "$latestTag" > "${installdir}/${name}/.releaseinfo"
-      echo "releaseinfo=$latestTag" > "${installdir}/${name}/.zot"
       if ! $localInstall; then
         symlinkIntoSystem
       fi
@@ -264,7 +263,7 @@ EOF
         . $HOME/.zopen-config
       fi
     fi
-    printInfo "Successfully installed $name"
+    printInfo "${NC}${GREEN}Successfully installed $name${NC}"
 )
 
 installPorts()

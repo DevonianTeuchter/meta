@@ -13,6 +13,7 @@ printSyntax()
   echo "Syntax: zopen-query [<option>]* [<package]*" >&2
   echo "  where <option> may be one or more of:" >&2
   echo "  --list: list all available z/OS Open Tools."  >&2
+  echo "  --remote-search: check for package in z/OS Open Tools repo" >&2
   echo "  -i : --installed: list install z/OS Open Tools." >&2
 #TODO echo " --upgradeable: list packages where an upgrade is available." >&2
 #TODO echo "  --provides: list the files that an installed package provides." >&2
@@ -42,70 +43,75 @@ getContentsFromGithub()
 printDetailListEntries()
 {
   details=$1
+  needle=$2
   if [[ $details -eq 0 ]]; then
-    printf "${NC}${UNDERLINE}${1}%-20s %-20s %-20s\n${NC}" "Repo" "Your version" "Latest Tag"
+    printf "${NC}${UNDERLINE}%-20s %-20s %-20s\n${NC}" "Repo" "Your version" "Latest Tag"
     echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
       name=${repo%port}
-      if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
-        exit 4;
-      fi
-      #FIXME: use jq to parse
-      latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
-      if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
-        originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
-      else
-        originalTag="Not installed"
-      fi
-      printf "%-20s %-20s %-20s\n" "$repo" "$originalTag" "$latestTag" 
+      if [ -z $needle ] || [ "${name}" = "${needle}" ]; then
+        if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+          exit 4;
+        fi
+        #FIXME: use jq to parse
+        latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+        if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
+          originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
+        else
+          originalTag="Not installed"
+        fi
+        printf "%-20s %-20s %-20s\n" "$repo" "$originalTag" "$latestTag"
+      fi 
     done
   else
     printVerbose "Checking repoArray: $repoArray"
-    printf "${NC}${UNDERLINE}${1}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Your version" "Latest Tag" "Status" "Quality"
+    printf "${NC}${UNDERLINE}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Your version" "Latest Tag" "Status" "Quality"
     echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
       name=${repo%port}
-      if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
-        exit 4;
-      fi
-      #FIXME: use jq to parse
-      latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
-      statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
-      buildQuality="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>##" -e "s#[ ]*(.*##" | tr -d ' ')"
-      testStatus="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>[^(]*(##" -e "s#).*##")"
-      if [ -z "$buildQuality" ]; then
-        buildQuality="Untested"
-        testStatus="N/A";
-      fi
-      if [ ! -z "$filter" ]; then
-        qualityLower=$(echo "$buildQuality" | awk '{print tolower($0)}')
-        if [ "$filter" != "$qualityLower" ]; then
-          continue;
+      if [ -z $needle ] || [ "${name}" = "${needle}" ]; then
+        if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+          exit 4;
         fi
+        #FIXME: use jq to parse
+        latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+        statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
+        buildQuality="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>##" -e "s#[ ]*(.*##" | tr -d ' ')"
+        testStatus="$(echo "$statusline" | sed -e "s#.*Test Status:<\/b>[^(]*(##" -e "s#).*##")"
+        if [ -z "$buildQuality" ]; then
+          buildQuality="Untested"
+          testStatus="N/A";
+        fi
+        if [ ! -z "$filter" ]; then
+          qualityLower=$(echo "$buildQuality" | awk '{print tolower($0)}')
+          if [ "$filter" != "$qualityLower" ]; then
+            continue;
+          fi
+        fi
+        
+        if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
+          originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
+        else
+          originalTag="Not installed"
+        fi
+        printf "%-20s %-20s %-20s " "$repo" "$originalTag" "$latestTag" 
+         case $buildQuality in
+          "Green")
+          printf "${NC}${GREEN}${1}%-10s${NC}" "$buildQuality"
+          ;;
+          "Red" | "Untested" | "Skipped" )
+          printf "${NC}${RED}${1}%-10s${NC}" "$buildQuality"
+          ;;
+          "Blue")
+          printf "${NC}${BLUE}${1}%-10s${NC}" "$buildQuality"
+          ;;
+          "Yellow")
+          printf "${NC}${YELLOW}${1}%-10s${NC}" "$buildQuality"
+          ;;
+          *)
+          printf "%-10s" "$buildQuality"
+          ;;
+         esac
+        printf " %-25s\n"  "$testStatus"
       fi
-
-      if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
-        originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.zot" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
-      else
-        originalTag="Not installed"
-      fi
-      printf "%-20s %-20s %-20s " "$repo" "$originalTag" "$latestTag" 
-       case $buildQuality in
-      "Green")
-        printf "${NC}${GREEN}${1}%-10s${NC}" "$buildQuality"
-        ;;
-        "Red" | "Untested" | "Skipped" )
-        printf "${NC}${RED}${1}%-10s${NC}" "$buildQuality"
-        ;;
-        "Blue")
-        printf "${NC}${BLUE}${1}%-10s${NC}" "$buildQuality"
-        ;;
-        "Yellow")
-        printf "${NC}${YELLOW}${1}%-10s${NC}" "$buildQuality"
-        ;;
-        *)
-        printf "%-10s" "$buildQuality"
-        ;;
-       esac
-      printf " %-25s\n"  "$testStatus"
       continue;   
     done
   fi
@@ -116,10 +122,11 @@ printInstalledEntries(){
     printf "${NC}${UNDERLINE}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Installed version" "Tag"
   fi
 
-  installedPackages="$(find $ZOPEN_PKGINSTALL -name .zot)"
+  installedPackages="$(find $ZOPEN_PKGINSTALL -name .installed)"
   printVerbose "Packages: $installedPackages"
   echo "$installedPackages" | xargs | tr ' ' '\n' | sort | while read repo; do
-    originalTag=$(cat "${repo}" | awk -v key=releaseinfo -F= '$1 == key { print $2}')
+    pkghome=$(dirname "${repo}")
+    originalTag=$(cat "${pkghome}/.releaseinfo")
     printVerbose "Original tag: $originalTag for repo: $repo"
     if [ -z "$1" ]; then
 #TODO pick an option      printInfo "$originalTag -> $( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
@@ -224,7 +231,7 @@ checkProvides(){
   if [[ -z $found ]]; then
     printInfo "No package provides '${needle}'"
   else
-    matches=$(echo "$found"| wc -w) 
+    matches=$(echo "$found"| wc -w | tr -d ' ' ) 
     printInfo "Found ${matches} match$([ $matches = 1 ] && echo "" || echo "es") on the system"
     echo "$found" | xargs | tr ' ' '\n' | while read repo; do
       printVerbose "Parsing $repo"
@@ -246,9 +253,12 @@ checkProvides(){
 args=$*
 verbose=false
 localoption=true
+details=0
+needle=
 if [[ $# -eq 0 ]]; then
   printError "No option provided for query"
 fi
+
 while [[ $# -gt 0 ]]; do
   printVerbose "Parsing option: $1"
   case "$1" in
@@ -259,12 +269,20 @@ while [[ $# -gt 0 ]]; do
     "-i" | "--installed")
       localoption=true;
       installed=1;
+      list=;
     ;;
     "-wp" | "--whatprovides")
       localoption=true;
       whatprovides=1;
       shift;
       [ ! -z $1 ] || printError "Missing file argument";
+      needle=$1;
+    ;;
+    "--remote-search")
+      localoption=false;
+      remotesearch=1;
+      shift;
+      [ ! -z $1 ] || printError "Missing package argument";
       needle=$1;
     ;;
     "-f" | "--filter")
@@ -347,6 +365,7 @@ if ! $localoption; then
   done
 fi
 
+[[ -z "$remotesearch" ]] || printDetailListEntries $details $needle
 [[ -z "$list" ]] || printDetailListEntries $details
 [[ -z "$installed" ]] || printInstalledEntries $details
 [[ -z "$whatprovides" ]] || checkProvides $needle
