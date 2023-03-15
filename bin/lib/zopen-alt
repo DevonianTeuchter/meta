@@ -25,7 +25,7 @@ symlinkIntoSystem(){
     printInfo "Integrating package into file system"
     basedir=$installdir/$name/
     target=$ZOPEN_ROOTFS/usr
-    dirs=$(find $basedir -type d | grep -v ".git" | sort -r)
+    dirs=$(zosfind $basedir -type d | grep -v ".git" | sort -r)
     ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
     dircnt=0
     echo "  ${dircnt}/${ndirs}   0%"
@@ -34,7 +34,7 @@ symlinkIntoSystem(){
       trimdir=$(echo $dir | sed "s#^$basedir##")
       if [[ ! "x$trimdir" = "x" ]]; then 
         mkdir -p $target/$trimdir
-        filestolink=$(find $dir -type f)
+        filestolink=$(zosfind $dir -type f)
         nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
         flecnt=0
         pct=0
@@ -96,13 +96,15 @@ setAlt(){
 listAlts(){
   sett=$1
   needle=$2
-  found=$(find $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d -o -type l | grep "/${needle}-[^/]*")
+  found=$(zosfind $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d -o -type l | grep "/${needle}-[^/]*")
   if [[ -z $found ]]; then
     printInfo "No currently installed version of package '${needle}'"
     exit 4
   fi
-  deref=$(ls -l $ZOPEN_PKGINSTALL/$needle | awk '{ print $(NF) }')
-  printVerbose "Current version: ${deref#$ZOPEN_PKGINSTALL/}"
+  if [ -e $ZOPEN_PKGINSTALL/$needle ]; then
+    deref=$(ls -l $ZOPEN_PKGINSTALL/$needle | awk '{ print $(NF) }')
+    printVerbose "Current version: ${deref#$ZOPEN_PKGINSTALL/}"
+  fi
 
   i=0
   current=0
@@ -125,6 +127,8 @@ listAlts(){
   
   if $sett; then
     setAlt $i $needle
+    unset $sett
+    listAlts false $needle
   fi
   exit 0
 }
