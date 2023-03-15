@@ -14,7 +14,8 @@ printSyntax()
   echo "Syntax: zopen init [<option>] <root-dir>" >&2
   echo "  where <option> can be one or more of:" >&2
   echo "  -f <type>: use an alternative virtual filesystem layout" >&2
-  echo "      prod - zopen standard (default);" >&2
+  echo "      zopen - /usr/zopen (default);" >&2
+  echo "      prod - zopen standard;" >&2
   echo "      ibm  - /usr/lpp;" >&2
   echo "      fhs  - File Hierarchical Standard (/opt)"  >&2
   echo "  -v: run in verbose mode" >&2
@@ -24,7 +25,7 @@ printSyntax()
 args=$*
 
 verbose=false
-layoutfs="prod"
+layoutfs="zopen"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     "-f")
@@ -45,7 +46,7 @@ while [[ $# -gt 0 ]]; do
   shift;
 done
 case "$layoutfs" in
-  fhs|ibm|prod)
+  fhs|ibm|prod|zopen)
   ;;
   *)
     printError "The filesystem layout $layoutfs is unrecognised"
@@ -99,6 +100,9 @@ case "$layoutfs" in
   "prod")
     zopen_pkginstall="prod"
   ;;
+  "zopen")
+    zopen_pkginstall="usr/zopen"
+  ;;
 esac
 [[ -e "$rootfs/$zopen_pkginstall" ]] || mkdir -p "$rootfs/$zopen_pkginstall"
 [[ -e "$rootfs/usr/share/zopen/prod" ]] || ln -s "$rootfs/$zopen_pkginstall" "$rootfs/usr/share/zopen/prod"
@@ -126,23 +130,29 @@ deleteDuplicateEntries()
   echo "\$value\$delim" | awk -v RS="\$delim" '!(\$0 in a) {a[\$0]; printf("%s%s", col, \$0); col=RS; }' | sed "s/\${delim}$//"
 }
 $zopen_oauth
+export ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall
+export ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/
+export ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem
+export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+export PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
+export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
+export LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
+export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+export MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
+
 if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
   for FILE in \$( find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print )
   do
     . \$FILE
+    export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+    export PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
+    export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
+    export LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
+    export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+    export MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
   done
 fi
 EOF
-
-echo "export ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall" >> "$HOME/.zopen-config"
-echo "export ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/" >> "$HOME/.zopen-config"
-echo "export ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"  >> "$HOME/.zopen-config"
-echo "export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")"  >> "$HOME/.zopen-config"
-echo "export PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")"  >> "$HOME/.zopen-config"
-echo "export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")"  >> "$HOME/.zopen-config"
-echo "export LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")"  >> "$HOME/.zopen-config"
-echo "export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")"  >> "$HOME/.zopen-config"
-echo "export MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")"  >> "$HOME/.zopen-config"
 
 printInfo "Created config in $HOME/.zopen-config. Updating environment"
 . "$HOME/.zopen-config"
@@ -152,7 +162,7 @@ runAndLog "${utildir}/zopen-bootstrap.rexx"
 printVerbose "Downloaded bootstrapped curl. Configuring for use"
 # Need to source the .env file from within the actual curl directory and cannot
 # spawn sub-processes so run inline
-curlfile="$(ls ~/zopen/boot |grep curl)"
+curlfile="$(ls $rootfs/boot |grep curl)"
 chmod -R 755 $rootfs/boot/$curlfile
 curwd=$PWD
 cd $rootfs/boot/$curlfile/
