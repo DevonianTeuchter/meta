@@ -5,6 +5,11 @@ export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
 
 . "${utildir}/common.inc"
 
+VERSION=0.0.1
+printVersion(){
+  ver=$VERSION
+  echo "$(basename "$0") (z/OS Tools)  ${ver}" 
+}
 printSyntax() 
 {
   args=$*
@@ -17,7 +22,7 @@ printSyntax()
   echo "  --reinstall: reinstall already installed z/OS Open Tools packages."  >&2
   echo "  --nosymlink: do not integrate into filesystem through symlink redirection. " >&2
   echo "  -v: run in verbose mode" >&2
-  echo "  -d, --download-only: download package to current directory" >&2
+  echo "  --download-only: download package to current directory" >&2
   echo "  -l, --local-install: download and unpackage to current directory" >&2
   echo "  and <package> is a list of one or more projects to install" >&2
 }
@@ -25,7 +30,7 @@ printSyntax()
 getContentsFromGithub()
 {
   url=$1
-  printVerbose "Requesting from url:${url}"
+  printVerbose "Requesting from url: ${url} "
   if ! repo_results=$(curl $OAUTH_TOKEN_OPTION "$OAUTH_TOKEN" -s "$url"); then
     printWarning "curl command could not download $url"
   fi
@@ -45,16 +50,16 @@ symlinkIntoSystem(){
 
     basedir=$installdir/$name/
     target=$ZOPEN_ROOTFS/usr
-    dirs=$(find $basedir -type d | grep -v ".git" | sort -r)
+    dirs=$(zosfind $basedir -type d | grep -v ".git" | sort -r)
     ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
     dircnt=0
-    echo "  ${dircnt}/${ndirs} 0%"
+    printInfo "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
     echo "$dirs" | while read dir; do
       dircnt=$(expr $dircnt + 1)
       trimdir=$(echo $dir | sed "s#^$basedir##")
       if [[ ! "x$trimdir" = "x" ]]; then 
         mkdir -p $target/$trimdir
-        filestolink=$(find $dir -type f)
+        filestolink=$(zosfind $dir -type f)
         nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
         flecnt=0
         pct=0
@@ -65,8 +70,15 @@ symlinkIntoSystem(){
           pct=`expr $pct / $nfiles`
           ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
           trimfile=$(echo $filetolink | sed "s#^$basedir##")
-          lnrc=$(ln -fs $filetolink $target/$trimfile)
-          
+          if [ ! -z $trimfile ]; then
+            #lnrc=ln -fs $filetolink $target/$trimfile
+            if ln -fs $filetolink $target/$trimfile; then
+              echo "$target/$trimfile" >> $basedir/.links
+            else
+              printInfo "${NC}${RED}Issue with linking '$filetolink' to '$target/$trimfile'${NC}"
+              printInfo "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+            fi
+          fi
         done
       fi
     done
@@ -75,55 +87,44 @@ symlinkIntoSystem(){
   fi
 }
 
-# Run in a subshell to sanitise envvars
 installDependencies()
 (
   name=$1
   dependencies=$2
-  if [ "$dependencies" != "No dependencies" ]; then
-    printHeader "Installing dependencies for $name: $dependencies..."
-    echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
-#TODO WOrk out why the need for the heredoc!  
-# [track already installed packages? attempting an install would just fail if already installed?]
-# [track cyclic dependancies? [most likely!]
- 
-#    # Remove an old one if it exists
-#    rm -f "${name}/.depsenv"
-#    varName=$(echo "$name" | sed -e "s/-/_/g")
-#    cat <<ZZ >> "${name}/.depsenv"
-#${varName}_originalDir="\$OLDPWD"
-#ZZ
-#    echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
-#      cat <<ZZ >> "${name}/.depsenv"
-#if [ -f "../${dep}/.env" ]; then
-#  if [[ \$(type echo) == 'echo is a shell builtin' ]]; then
-#    pushd "../${dep}" >/dev/null
-#    . ./.env
-#    popd >/dev/null
-#  else
-#    cd "../${dep}" && . ./.env; cd - >/dev/null
-#  fi
-#fi
-#ZZ
-      installPort $dep
-    done
-
-    cat <<ZZ >> "${name}/.depsenv"
-OLDPWD="\$${varName}_originalDir"
-ZZ
-  fi
+  printVerbose "List of dependencies to install: $dependencies"
+  echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
+    installPort $dep
+  done
 )
+
+
+
+
+
+
+handleDependencies(){
+  installedList="$name $installedList"
+  if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
+    dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
+    if [ ! "$dependencies" = "No dependencies" ]; then
+      printInfo "$name depends on: $dependencies"
+      installDependencies "$name" "$dependencies"
+    fi
+  fi
+}
 
 installPort()
 (
-  name=$1
+  fullname=$1
+  name=$(echo $fullname | sed -e 's#[=%].*##')
+
   repo="${name}port"
 
   printHeader "Processing package: $name"
   if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
     exit 4;
   fi
-
+  printVerbose "Contents returned: $contents"
   if [ -z "$contents" ]; then
     printInfo "No releases published for $name"
     continue
@@ -144,25 +145,38 @@ installPort()
   printVerbose "Latest tag=${latestTag};Original=${originalTag};${originalTag};${latestTag};${upgradeInstalled};${installOrUpgrade};${reinstall}"
   if [ "${latestTag}" = "${originalTag}" ]; then
     if ! $reinstall; then
-      printInfo "Package ${name} with latest release tag \"${latestTag}\" already installed."
+      printInfo "Package ${name} with release tag \"${latestTag}\" already installed."
       continue;
     fi
     printInfo "Reinstalling current version of ${name} with release tag \"${originalTag}\"..."
   fi
   printVerbose "Checking if package is not installed but scheduled for upgrade"
   if [ "x" = "x$originalTag" ]; then
-    if $upgradeInstalled; then
+    if $installOrUpgrade; then
+      printVerbose "Package ${name} was not installed so not upgrading but installing"
+    elif $upgradeInstalled; then
       printError "Package ${name} can not be upgraded as it is not installed!"
       continue;
     fi
     printInfo "Installing ${name}..."
   else
-    printInfo "Replacing ${name} version \"${originalTag}\" with \"${latestTag}\""
+    if [ -e ${ZOPEN_PKGINSTALL}/${name}/.pinned ]; then
+      printWarning "Version \"${originalTag}\" has been pinned; upgrade not possible"
+      continue;
+    else
+      printInfo "Replacing ${name} version \"${originalTag}\" with \"${latestTag}\""
+      unInstallOldVersion=true
+    fi
   fi
 
-    latest_url="$(echo "$contents" | grep "\"browser_download_url\":" | cut -d '"' -f 4)"
+    downloadURL="$(echo "$contents" | grep "\"browser_download_url\":" | cut -d '"' -f 4)"
+    if [ "" = "${downloadURL}" ]; then
+      printVerbose "Could not locate 'browser_download_url'. Parse 'body'..."
+      downloadURL="$(echo "$statusline" | sed -e "s#.*curl -o - -L ##" -e "s#\.zos\.pax\.Z.*#\.zos\.pax\.Z#")"
+      printVerbose "Trying url: ${downloadURL}" 
+    fi
     printVerbose "Checking cache for already downloaded package [file name comparison]"
-    pax=$(basename $latest_url)
+    pax=$(basename $downloadURL)
     if [ -f $pax ]; then
       printInfo "Found existing file '${pax}' in download cache."
     else
@@ -170,37 +184,24 @@ installPort()
       if ! $verbose; then
         redirectToDevNull="2>/dev/null"
       fi 
-      if ! runAndLog "curl -L ${latest_url} -O ${redirectToDevNull}"; then
-        printWarning "Could not download ${latest_url}"
+      if ! runAndLog "curl -L ${downloadURL} -O ${redirectToDevNull}"; then
+        printWarning "Could not download ${downloadURL}"
         continue;
       fi
     fi
-    if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
-      dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
-      if $doNotInstallDeps; then
-        printInfo "Skipping dependancy installation"
-      else
-        printInfo "Checking and installing any dependencies"
-        installDependencies "$name" "$dependencies"
-      fi
-    else
-      dependencies="No dependencies"
-    fi
-    
+
     if ! $downloadOnly; then
       if [ ! -f "${pax}" ]; then
         printError "${pax} was not actually downloaded?"
       fi
-      dirname=${pax%.pax.Z} # Use full pax name as default
-      if $reduceddirstructure; then
-        # get extracted directory
-        dirname=$(pax -vf $pax -o listopt="%(name)s" | head -1 | sed -e "s#/\$##")
-        printVerbose "Directory name: $dirname"
-        if [ -d "$dirname" ]; then
-          printInfo "Deleting existing $dirname..."
-          rm -rf "$dirname"
-        fi
+      
+      if $unInstallOldVersion; then
+        printVerbose "Uninstalling any previous version - silently"
+        # This will remove any old symlinks or dirs that might have changed in an upgrade
+        # for example, even if it's a reinstall as things might have changed
+        zopen remove ${name} --silent
       fi
+      dirname=${pax%.pax.Z} # Use full pax name as default
 
       printInfo "Extracting $pax..."
       installdir="."
@@ -210,6 +211,7 @@ installPort()
         paxredirect="-s##$ZOPEN_PKGINSTALL/#"
         printVerbose "Non-local install, extracting with '$paxredirect'"
       fi
+
       printVerbose "Check for existing directory for version '$dirname'"
       if [ -d $installdir/$dirname ]; then 
         printInfo "Removing existing directory and contents"
@@ -222,22 +224,12 @@ installPort()
       if $localInstall; then
         rm -f "${pax}"
       fi
-      if $reduceddirstructure; then  
-        newDir=$(echo "$dirname" | sed -e "s/\.202[0-9]*_[0-9]*\.zos//g" -e "s/\.zos//g")
-        # Using new directory name
-        if [ "$newDir" != "$dirname" ]; then
-          printVerbose "Moving $dirname to $newDir"
-          rm -rf "$newDir"
-          mv "$dirname" "$newDir"
-          dirname="$newDir"
-        fi
-      fi
       if [ -L $installdir/$name ]; then
         printVerbose "Removing old symlink '$installdir/$name' and recreating"
         rm -f $installdir/$name
       fi 
 
-      printVerbose "Calulating package install dir (nover/onlyver/buildver)"
+      printVerbose "Calculating package install dir (nover/onlyver/buildver)"
       actualdir=$(pax -f $pax|tail -n 1|cut -f1 -d'/')
       if ! ln -s $installdir/$actualdir $installdir/$name; then
         printError "Could not create symbolic link name"
@@ -246,6 +238,14 @@ installPort()
       # Add tag information as a .releaseinfo file
       echo "$latestTag" > "${installdir}/${name}/.releaseinfo"
       touch "${installdir}/${name}/.installed"
+      # Check for a .version file from the pax - if present good, if not
+      # generate one from the file name as the tag isn't granular enough to really
+      # be used in dependency checks 
+      if [ ! -f "${installdir}/${name}/.version" ]; then
+        latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
+        echo "$latestTag" > "${installdir}/${name}/.releaseinfo"
+      fi
+
       if ! $localInstall; then
         symlinkIntoSystem
       fi
@@ -265,20 +265,34 @@ EOF
         . $HOME/.zopen-config
       fi
     fi
+    printVerbose "Marking this version as installed"
+    touch "${installdir}/${name}/.installed"
+    
+    installedList="$name $installedList"
+
+    if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
+      dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
+      if $doNotInstallDeps; then
+        printInfo "Skipping dependancy installation"
+      else
+        if [ ! "$dependencies" = "No dependencies" ]; then
+          printInfo "$name depends on: $dependencies"
+          installDependencies "$name" "$dependencies"
+        fi
+      fi
+    fi
     printInfo "${NC}${GREEN}Successfully installed $name${NC}"
 )
 
 installPorts()
 (
-  echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
-    name=${repo%port}
-    if ! latest_url="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
-      exit 4;
-    fi
-
-    installPort $name
+  ports="$1"
+  printVerbose "Ports to install: $ports"
+  echo "$ports" | xargs | tr ' ' '\n' | while read port; do
+    installPort $port
   done
 )
+
 # Main code start here
 args=$*
 upgradeInstalled=false
@@ -288,8 +302,8 @@ localInstall=false
 reinstall=false
 installOrUpgrade=false
 nosymlink=false
-reduceddirstructure=false
 doNotInstallDeps=false
+all=false
 chosenRepos=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -315,11 +329,21 @@ while [[ $# -gt 0 ]]; do
     "--nodeps")
       doNotInstallDeps=true
       ;;
-    "-d" | "--download-only")
+    "--download-only")
       downloadOnly=true
+      ;;
+    "--no-set-active")
+      setactive=false
+      ;;
+    "--all")
+      all=true
       ;;
     "-v" | "--v" | "-verbose" | "--verbose")
       verbose=true
+      ;;
+    "--version")
+      printVersion
+      exit 4
       ;;
     *)
       chosenRepos="$chosenRepos $1";
@@ -327,6 +351,11 @@ while [[ $# -gt 0 ]]; do
   esac
   shift;
 done
+
+if [ -z "${chosenRepos}" ] && ! $all; then
+    printInfo "No ports selected for installation"
+    exit 4
+fi
 
 [[ ! -z "${ZOPEN_CA}" ]] || printError "Internal Error. \$ZOPEN_CA must be set"
 [[ -r "${ZOPEN_CA}" ]] || printError "Internal Error. Certificate ${ZOPEN_CA} is required"
@@ -372,7 +401,7 @@ printVerbose "Working directory: ${downloadDir}"
 
 # Parse repositories for zopen framework repos
 foundPort=false
-repoArray=""
+installArray=""
 for repo in $(echo ${repo_results}); do
   repo=${repo#"ZOSOpenTools/"}
   name=${repo%port}
@@ -382,23 +411,28 @@ for repo in $(echo ${repo_results}); do
     continue;
   fi
 
-  if [ -z "${chosenRepos}" ]; then
-    repoArray="$repoArray $repo"
-  else
-    for toolrepo in $(echo "${chosenRepos}" | tr ',' '\n'); do
-      if [ "${toolrepo}" = "${repo}" ] || [ "${toolrepo}" = "${name}" ]; then
-        # Skip if the repo does not end with port
-        if [ "${repo}" = "${name}" ]; then
-          continue;
-        fi
-        repoArray="$repoArray $repo"
-      fi
-    done
+  if $all; then
+    # Installing everything ?!?!?
+    installArray="$installArray $repo"
+    continue;
   fi
+  for chosenRepo in $(echo "${chosenRepos}" | tr ',' '\n'); do
+    toolrepo=$(echo $chosenRepo | sed -e 's#%.*##' -e 's#=.*##') 
+    if [ "${toolrepo}" = "${repo}" ] || [ "${toolrepo}" = "${name}" ]; then
+      # Skip if the repo does not end with port
+      if [ "${repo}" = "${name}" ]; then
+        continue;
+      fi
+      printVerbose "Adding '$chosenRepo' to the install queue"
+      installArray="$installArray $chosenRepo"
+      printVerbose "Removing valid port from input list"
+      chosenRepos=$(echo $chosenRepos | sed -e "s#$chosenRepo##")
+    fi
+  done
 done
 
-if [ -z "$repoArray" ]; then
-  printError "Could not find specified $toolrepo. Use 'list' option to view available ports"
+printVerbose "Checking whether any ports remain in the input list"
+if [ ! "x" = "x$chosenRepos" ]; then
+  printError "The following requested port(s) do not exist:\n\t$(echo $chosenRepos | tr -s '[:space:]')"
 fi
-
-installPorts
+installPorts "$installArray"
