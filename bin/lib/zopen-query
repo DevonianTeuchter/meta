@@ -20,6 +20,7 @@ printSyntax()
   echo "  -wp : --whatprovides: which installed package provided a file." >&2
   echo "  -v: run in verbose mode." >&2
   echo "  -d | --details: include full details for listings." >&2
+  echo "  --no-header: suppress the header for the output." >&2
   echo "  --filter <color>: apply filter based on quality (green - all tests passing, blue - most tests passing, yellow - some tests passing, red - no tests passing, or skipped (no filter by default))"  >&2
   echo " and <package> is an optional list of one or more packages." >&2
 }
@@ -44,8 +45,11 @@ printDetailListEntries()
 {
   details=$1
   needle=$2
+
   if [[ $details -eq 0 ]]; then
-    printf "${NC}${UNDERLINE}%-20s %-20s %-20s\n${NC}" "Repo" "Your version" "Latest Tag"
+    if ! $noheader; then
+      printf "${NC}${UNDERLINE}%-15s %-15s %-15s %-15s\n${NC}" "Repo" "Your version" ".version" "Latest Tag"
+    fi
     echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
       name=${repo%port}
       if [ -z $needle ] || [ "${name}" = "${needle}" ]; then
@@ -59,12 +63,19 @@ printDetailListEntries()
         else
           originalTag="Not installed"
         fi
-        printf "%-20s %-20s %-20s\n" "$repo" "$originalTag" "$latestTag"
+        if [ -e "${ZOPEN_PKGINSTALL}/${name}/.version" ]; then
+          dotversion=$(cat "${ZOPEN_PKGINSTALL}/${name}/.version")
+        else
+          dotversion="N/a"
+        fi
+        printf "%-15s %-15s %-15s %-15s\n" "$repo" "$originalTag" "dotversion" "$latestTag"
       fi 
     done
   else
     printVerbose "Checking repoArray: $repoArray"
-    printf "${NC}${UNDERLINE}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Your version" "Latest Tag" "Status" "Quality"
+    if ! $noheader; then
+      printf "${NC}${UNDERLINE}%-15s %-15s %-15s %-10s %-25s\n${NC}" "Repo" "Your version" "Latest Tag" "Status" "Quality"
+    fi
     echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
       name=${repo%port}
       if [ -z $needle ] || [ "${name}" = "${needle}" ]; then
@@ -92,7 +103,7 @@ printDetailListEntries()
         else
           originalTag="Not installed"
         fi
-        printf "%-20s %-20s %-20s " "$repo" "$originalTag" "$latestTag" 
+        printf "%-15s %-15s %-15s " "$repo" "$originalTag" "$latestTag" 
          case $buildQuality in
           "Green")
           printf "${NC}${GREEN}${1}%-10s${NC}" "$buildQuality"
@@ -118,15 +129,20 @@ printDetailListEntries()
   exit 0
 }
 printInstalledEntries(){
-  if [ ! -z "$1" ]; then
-    printf "${NC}${UNDERLINE}%-20s %-20s %-20s %-10s %-25s\n${NC}" "Repo" "Installed version" "Tag"
+  if [ ! -z "$1" ] && ! $noheader; then
+    printf "${NC}${UNDERLINE}%-15s %-20s %-15s %-15s\n${NC}" "Repo" "Installed version" ".version" "Tag"
   fi
-
-  installedPackages="$(find $ZOPEN_PKGINSTALL -name .installed)"
+  installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .installed)"
   printVerbose "Packages: $installedPackages"
   echo "$installedPackages" | xargs | tr ' ' '\n' | sort | while read repo; do
     pkghome=$(dirname "${repo}")
     originalTag=$(cat "${pkghome}/.releaseinfo")
+    if [ -e "${pkghome}/.version" ]; then
+      dotversion=$(cat "${pkghome}/.version")
+    else
+      dotversion="N/a"
+    fi
+        
     printVerbose "Original tag: $originalTag for repo: $repo"
     if [ -z "$1" ]; then
 #TODO pick an option      printInfo "$originalTag -> $( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
@@ -135,7 +151,7 @@ printInstalledEntries(){
     else
       fileversion="$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
       reponame=${fileversion%-*}
-      printf '%-20s %-20s %-20s\n' "$reponame" "$originalTag" "$fileversion"
+      printf '%-15s %-20s %-15s %-15s\n' "$reponame" "$originalTag" "$dotversion" "$fileversion"
     fi
   done
   exit 0
@@ -226,7 +242,7 @@ done
 
 checkProvides(){
   needle=$1
-  found=$(find $ZOPEN_ROOTFS/usr -name "${needle}")
+  found=$(zosfind $ZOPEN_ROOTFS/usr -name "${needle}")
   printVerbose "Found? '$found'"
   if [[ -z $found ]]; then
     printInfo "No package provides '${needle}'"
@@ -252,6 +268,7 @@ checkProvides(){
 # Main code start here
 args=$*
 verbose=false
+noheader=false
 localoption=true
 details=0
 needle=
@@ -284,6 +301,9 @@ while [[ $# -gt 0 ]]; do
       shift;
       [ ! -z $1 ] || printError "Missing package argument";
       needle=$1;
+    ;;
+    "--no-header")
+      noheader=true;
     ;;
     "-f" | "--filter")
       filter=$2;
