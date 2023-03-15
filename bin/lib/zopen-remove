@@ -77,7 +77,7 @@ unsymlinkFromSystemVerbose(){
 }
 removePackageDirectories(){
   pkg=$1
-  printInfo "- Removing any directories associated with package"
+  [ $silent ] || printInfo "- Removing any directories associated with package"
   zosfind $ZOPEN_ROOTFS/usr/ -type d -name $pkg -print | sort -r | while read rmdir; do
     printVerbose "Removing orphaned directory: $rmdir"  
     rm -rf $rmdir
