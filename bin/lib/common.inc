@@ -4,6 +4,8 @@ defineANSI()
   # Standard tty codes
   ESC="\047"
   ERASELINE="${ESC}[2K"
+  CRSRHIDE="${ESC}[?25l"
+  CRSRSHOW="${ESC}[?25h"
 
   # Color-type codes, needs explicit terminal settings
   if [ ! "${_BPX_TERMPATH-x}" = "OMVS" ] && [ -z "${NO_COLOR}" ] && [ ! "${FORCE_COLOR-x}" = "0" ] && [ -t 1 ] && [ -t 2 ]; then
@@ -81,6 +83,16 @@ crsrRight(){
 crsrLeft(){
   chars=$1
   /bin/echo "${ESC}[${chars}D"
+}
+
+zosfind(){
+  # Use the standard z/OS find utility; If the findutils package is installed,
+  # the installed find command takes precedence but is not compatible with the
+  # standard zos find [regex searches for "-name" are not allowed, but
+  # "-wholename" is not available on standard zosfind. For the tooling to be
+  # consistent across platofmrs (where findutils is/is not installed) use the
+  # standard zos version
+  /bin/find $*
 }
 
 defineEnvironment()
@@ -192,6 +204,7 @@ printInfo()
   printColors "$1" >&2
 }
 
+# Used to input sensitive data - turns off echo to the screen for the input
 getInputHidden()
 {
   stty -echo
@@ -310,4 +323,10 @@ validateVersion()
   return 0
 }
 
+deleteDuplicateEntries() 
+{
+  value=$1
+  delim=$2
+  echo "$value$delim" | awk -v RS="$delim" '!($0 in a) {a[$0]; printf("%s%s", col, $0); col=RS; }' | sed "s/${delim}$//"
+}
 zopenInitialize
