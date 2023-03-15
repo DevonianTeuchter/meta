@@ -388,6 +388,14 @@ if [ -z "${chosenRepos}" ] && ! $all; then
     exit 4
 fi
 
+if $all; then
+  printInfo "Enter 'all' to confirm full installation [takes a long time!]:"
+  confirmall=$(getInput)
+  if [ ! "xall" = "x$confirmall" ]; then
+    printError "Cancelling full installation"
+  fi
+fi
+
 [[ ! -z "${ZOPEN_CA}" ]] || printError "Internal Error. \$ZOPEN_CA must be set"
 [[ -r "${ZOPEN_CA}" ]] || printError "Internal Error. Certificate ${ZOPEN_CA} is required"
 
