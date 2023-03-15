@@ -93,65 +93,103 @@ installDependencies()
   dependencies=$2
   printVerbose "List of dependencies to install: $dependencies"
   echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
-    installPort $dep
+    handlePackageInstall $dep
   done
 )
 
+handlePackageInstall(){
 
-
-
-
-
-handleDependencies(){
-  installedList="$name $installedList"
-  if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
-    dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
-    if [ ! "$dependencies" = "No dependencies" ]; then
-      printInfo "$name depends on: $dependencies"
-      installDependencies "$name" "$dependencies"
-    fi
-  fi
-}
-
-installPort()
-(
   fullname=$1
+  printVerbose "Checking whether specific version '=' or tag '%' has been specified in '$port'"
   name=$(echo $fullname | sed -e 's#[=%].*##')
-
   repo="${name}port"
-
+  versioned="$(echo $fullname | cut -s -d '=' -f 2)"
+  tagged="$(echo $fullname | cut -s -d '%' -f 2)"
+  printVerbose "Name:$name;version:$versioned;tag:$tagged;repo:$repo"
   printHeader "Processing package: $name"
-  if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+
+  if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases")"; then
     exit 4;
   fi
-  printVerbose "Contents returned: $contents"
+  #printVerbose "Contents returned: $contents"
   if [ -z "$contents" ]; then
     printInfo "No releases published for $name"
-    continue
+    return
   fi
 
-  statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
-
-  latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
-  printInfo "Release with tag \"${latestTag}\" found for ${name}"
   originalTag=""
+  originalFileVersion=""
   printVerbose "Checking for meta file at: ${ZOPEN_PKGINSTALL}/${name}/.releaseinfo"
   if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
     originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
-    printVerbose "Found originalTag = $originalTag"
+    printVerbose "Found originalTag=$originalTag (port is already installed)"
+    originalFileVersion=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
+    printVerbose "Found originalFileVersion=$originalFileVersion (port is already installed)"
   else
     printVerbose "Could not detect existing installation at ${ZOPEN_PKGINSTALL}/${name}"
   fi
-  printVerbose "Latest tag=${latestTag};Original=${originalTag};${originalTag};${latestTag};${upgradeInstalled};${installOrUpgrade};${reinstall}"
-  if [ "${latestTag}" = "${originalTag}" ]; then
-    if ! $reinstall; then
-      printInfo "Package ${name} with release tag \"${latestTag}\" already installed."
-      continue;
+
+  downloadURL=""
+  if [ ! "x" = "x$versioned" ]; then
+    printVerbose "Specific version requested - checking existence and URL"
+    requestedMajor=$(echo $versioned | awk -F'.' '{print $1}')
+    requestedMinor=$(echo $versioned | awk -F'.' '{print $2}')
+    requestedPatch=$(echo $versioned | awk -F'.' '{print $3}')
+    requestedSubrelease=$(echo $versioned | awk -F'.' '{print $4}')
+    requestedVersion="${requestedMajor}.${requestedMinor}.${requestedPatch}.${requestedSubrelease}"
+    printVerbose "Finding URL for latest release matching version prefix: requestedVersion:$requestedVersion"
+    # list all released filenames, sort them and grab the last (which should be the newest file starting with the
+    # specified prefix (fuzzy find rather than exact match)
+    latestfiledetails="$(echo "$contents" | awk -F'/' -v PORT=$name -v REQVER=$versioned '
+      BEGIN{regex = PORT"-"REQVER".*\.pax\.Z"} {if ( $0 ~ regex ){ print $NF"#@#"$0}}
+    ' | sort -u | tail -n 1 | tr -d '\"')"
+     downloadURL="$(echo $latestfiledetails | sed -E 's/.*url: (https.*)/\1/')"
+  elif [ ! "x" = "x$tagged" ]; then
+    printVerbose "Specific tagged release requested - checking existence and URL"
+    taggeddetails="$(echo "$contents" | awk -F'/' -v PORT=$name -v TAG=$tagged '
+      BEGIN{regex = "\"tag_name\": \""PORT"port_"TAG"\""; output=0}
+       { if ( $0 ~ regex ) {output=1;}}
+      /browser_download_url/ {  if (output==1) {print; output=0} }
+      
+    ' | sort -u | tail -n 1 | tr -d '\"')"
+    downloadURL="$(echo $taggeddetails | tr -d "\"" | sed -E 's/.*url: (https.*)/\1/')"
+  else
+    printVerbose "No explicit version/tag, using latest"
+    if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
+      exit 4;
     fi
-    printInfo "Reinstalling current version of ${name} with release tag \"${originalTag}\"..."
+    if [ -z "$contents" ]; then
+      printInfo "No latest release published for $name"
+      exit 4
+    else
+      statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
+      downloadURL="$(echo "$contents" | grep "\"browser_download_url\":" | cut -d '"' -f 4)"
+      printVerbose "Check for browser_download_url tag returned: $downloadURL"
+      if [ "" = "${downloadURL}" ]; then
+        printVerbose "Could not locate 'browser_download_url'. Parse 'body'..."
+        downloadURL="$(echo "$statusline" | sed -e "s#.*curl -o - -L ##" -e "s#\.zos\.pax\.Z.*#\.zos\.pax\.Z#")"
+      fi
+    fi
   fi
+  if [ "x" = "x$downloadURL" ]; then
+    printError "Unable to determine download location for ${name}"
+  fi
+  downloadFile="$(basename "$downloadURL")"
+  downloadFileVer="$(echo $downloadFile |sed -E 's/.*-(.*)\.zos\.pax\.Z/\1/')"
+  printVerbose "Downloading port from URL: $downloadURL to file: $downloadFile (ver=$downloadFileVer)"
+
+  printVerbose "Install=${downloadFileVer};Original=${originalFileVersion};${upgradeInstalled};${installOrUpgrade};${reinstall}"
+  if [ "${downloadFileVer}" = "${originalFileVersion}" ]; then
+    if ! $reinstall; then
+      printInfo "Package ${name} is already installed at the requested version: ${downloadFileVer}"
+      return;
+    fi
+    printInfo "Reinstalling version '$downloadFileVer' of ${name}..."
+  fi
+
   printVerbose "Checking if package is not installed but scheduled for upgrade"
-  if [ "x" = "x$originalTag" ]; then
+  if [ "x" = "x$originalFileVersion" ]; then
+    printVerbose "No previous version found"
     if $installOrUpgrade; then
       printVerbose "Package ${name} was not installed so not upgrading but installing"
     elif $upgradeInstalled; then
@@ -160,100 +198,94 @@ installPort()
     fi
     printInfo "Installing ${name}..."
   else
+    printVerbose "Previous version '${originalFileVersion}' installed"
     if [ -e ${ZOPEN_PKGINSTALL}/${name}/.pinned ]; then
-      printWarning "Version \"${originalTag}\" has been pinned; upgrade not possible"
+      printWarning "Version '${originalFileVersion}' has been pinned; upgrade not possible"
       continue;
     else
-      printInfo "Replacing ${name} version \"${originalTag}\" with \"${latestTag}\""
+      printInfo "Replacing ${name} version '${originalFileVersion}' with '${downloadFileVer}'"
       unInstallOldVersion=true
     fi
   fi
 
-    downloadURL="$(echo "$contents" | grep "\"browser_download_url\":" | cut -d '"' -f 4)"
-    if [ "" = "${downloadURL}" ]; then
-      printVerbose "Could not locate 'browser_download_url'. Parse 'body'..."
-      downloadURL="$(echo "$statusline" | sed -e "s#.*curl -o - -L ##" -e "s#\.zos\.pax\.Z.*#\.zos\.pax\.Z#")"
-      printVerbose "Trying url: ${downloadURL}" 
+  printVerbose "Checking cache for already downloaded package [file name comparison]"
+  pax=$downloadFile
+  if [ -f $pax ]; then
+    printInfo "Found existing file '${pax}' in download cache."
+  else
+    printInfo "Downloading release from $repo to cache..."
+    if ! $verbose; then
+      redirectToDevNull="2>/dev/null"
+    fi 
+    if ! runAndLog "curl -L ${downloadURL} -O ${redirectToDevNull}"; then
+      printError "Could not download from ${downloadURL}"
+      continue;
     fi
-    printVerbose "Checking cache for already downloaded package [file name comparison]"
-    pax=$(basename $downloadURL)
-    if [ -f $pax ]; then
-      printInfo "Found existing file '${pax}' in download cache."
-    else
-      printInfo "Downloading latest release from $repo..."
-      if ! $verbose; then
-        redirectToDevNull="2>/dev/null"
-      fi 
-      if ! runAndLog "curl -L ${downloadURL} -O ${redirectToDevNull}"; then
-        printWarning "Could not download ${downloadURL}"
-        continue;
-      fi
+  fi
+  if [ ! -f "${pax}" ]; then
+    printError "${pax} was not found after downloaded!?!"
+  fi
+
+  if ! $downloadOnly; then
+    if $unInstallOldVersion; then
+      printVerbose "Uninstalling any previous version - silently"
+      # This will remove any old symlinks or dirs that might have changed in an upgrade
+      # for example, even if it's a reinstall [updated file might still be different!]
+      zopen remove ${name} --silent
+    fi
+    dirname=${pax%.pax.Z} # Use full pax name as default
+  
+    printInfo "Extracting $pax..."
+    installdir="."
+    paxredirect=""
+    if ! $localInstall; then
+      installdir=$ZOPEN_PKGINSTALL
+      paxredirect="-s##$ZOPEN_PKGINSTALL/#"
+      printVerbose "Non-local install, extracting with '$paxredirect'"
+    fi
+  
+    printVerbose "Check for existing directory for version '$dirname'"
+    if [ -d $installdir/$dirname ]; then 
+      printInfo "Removing existing directory and contents"
+      rm -rf $installdir/$dirname
+    fi
+    if ! runAndLog "pax -rf $pax -p p $paxredirect ${redirectToDevNull}"; then
+      printWarning "Could not extract $pax. Skipping"
+      continue;
+    fi
+    if $localInstall; then
+      rm -f "${pax}"
+    fi
+    if [ -L $installdir/$name ]; then
+      printVerbose "Removing old symlink '$installdir/$name' and recreating"
+      rm -f $installdir/$name
+    fi 
+  
+    printVerbose "Calculating package install dir (nover/onlyver/buildver)"
+    actualdir=$(pax -f $pax|tail -n 1|cut -f1 -d'/')
+    if ! ln -s $installdir/$actualdir $installdir/$name; then
+      printError "Could not create symbolic link name"
+    fi 
+  
+    printVerbose "Adding version '${originalFileVersion}' to info file"
+    # Add file version information as a .releaseinfo file
+    echo "$downloadFileVer" > "${installdir}/${name}/.releaseinfo"
+
+    # Check for a .version file from the pax - if present good, if not
+    # generate one from the file name as the tag isn't granular enough to really
+    # be used in dependency checks
+    if [ ! -f "${installdir}/${name}/.version" ]; then
+      echo "$downloadFileVer" > "${installdir}/${name}/.version"
     fi
 
-    if ! $downloadOnly; then
-      if [ ! -f "${pax}" ]; then
-        printError "${pax} was not actually downloaded?"
-      fi
-      
-      if $unInstallOldVersion; then
-        printVerbose "Uninstalling any previous version - silently"
-        # This will remove any old symlinks or dirs that might have changed in an upgrade
-        # for example, even if it's a reinstall as things might have changed
-        zopen remove ${name} --silent
-      fi
-      dirname=${pax%.pax.Z} # Use full pax name as default
-
-      printInfo "Extracting $pax..."
-      installdir="."
-      paxredirect=""
-      if ! $localInstall; then
-        installdir=$ZOPEN_PKGINSTALL
-        paxredirect="-s##$ZOPEN_PKGINSTALL/#"
-        printVerbose "Non-local install, extracting with '$paxredirect'"
-      fi
-
-      printVerbose "Check for existing directory for version '$dirname'"
-      if [ -d $installdir/$dirname ]; then 
-        printInfo "Removing existing directory and contents"
-        rm -rf $installdir/$dirname
-      fi
-      if ! runAndLog "pax -rf $pax -p p $paxredirect ${redirectToDevNull}"; then
-        printWarning "Could not extract $pax. Skipping"
-        continue;
-      fi
-      if $localInstall; then
-        rm -f "${pax}"
-      fi
-      if [ -L $installdir/$name ]; then
-        printVerbose "Removing old symlink '$installdir/$name' and recreating"
-        rm -f $installdir/$name
-      fi 
-
-      printVerbose "Calculating package install dir (nover/onlyver/buildver)"
-      actualdir=$(pax -f $pax|tail -n 1|cut -f1 -d'/')
-      if ! ln -s $installdir/$actualdir $installdir/$name; then
-        printError "Could not create symbolic link name"
-      fi 
-
-      # Add tag information as a .releaseinfo file
-      echo "$latestTag" > "${installdir}/${name}/.releaseinfo"
-      touch "${installdir}/${name}/.installed"
-      # Check for a .version file from the pax - if present good, if not
-      # generate one from the file name as the tag isn't granular enough to really
-      # be used in dependency checks 
-      if [ ! -f "${installdir}/${name}/.version" ]; then
-        latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
-        echo "$latestTag" > "${installdir}/${name}/.releaseinfo"
-      fi
-
-      if ! $localInstall; then
-        symlinkIntoSystem
-      fi
-      printVerbose "Checking for env file"
-      if [ -f ${installdir}/${name}/.env ]; then
-         printVerbose ".env file found, adding to profiled processing"
-         mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
-cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
+    if ! $localInstall; then
+      symlinkIntoSystem
+    fi
+    printVerbose "Checking for env file"
+    if [ -f ${installdir}/${name}/.env ]; then
+      printVerbose ".env file found, adding to profiled processing"
+      mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
+      cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
 curdir=\$(pwd)
 cd "$installdir/$name" >/dev/null 2>&1
 if [ -f ".env" ]; then
@@ -261,13 +293,11 @@ if [ -f ".env" ]; then
 fi
 cd \$curdir  >/dev/null 2>&1
 EOF
-        printVerbose "Re-sourcing environment"
-        . $HOME/.zopen-config
-      fi
+      printVerbose "Re-sourcing environment"
+      . $HOME/.zopen-config
     fi
     printVerbose "Marking this version as installed"
     touch "${installdir}/${name}/.installed"
-    
     installedList="$name $installedList"
 
     if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
@@ -282,14 +312,15 @@ EOF
       fi
     fi
     printInfo "${NC}${GREEN}Successfully installed $name${NC}"
-)
+  fi # (download only)
+}
 
 installPorts()
 (
   ports="$1"
   printVerbose "Ports to install: $ports"
   echo "$ports" | xargs | tr ' ' '\n' | while read port; do
-    installPort $port
+    handlePackageInstall $port
   done
 )
 
