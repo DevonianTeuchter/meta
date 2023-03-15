@@ -22,7 +22,7 @@ printSyntax()
 
 cleanUnused(){
   needle=$1
-  found=$(find $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d  | grep "/${needle}-[^/]*")
+  found=$(zosfind $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d  | grep "/${needle}-[^/]*")
   if [[ -z $found ]]; then
     printInfo "No currently installed version of package '${needle}'"
     return
@@ -52,7 +52,7 @@ cleanUnused(){
 }
 cleanDangling(){
   printVerbose "Removing dangling symlinks from the file structure"
-  find $ZOPEN_ROOTFS -type l -exec test ! -e {} \; -print | while read sl; do
+  zosfind $ZOPEN_ROOTFS -type l -exec test ! -e {} \; -print | while read sl; do
     printVerbose "Removing symlink '$sl'"
     rm -f $sl
   done
