@@ -215,7 +215,7 @@ getInputHidden()
 
 getInput()
 {
-  read zopen_input
+  read zopen_input < /dev/tty
   echo $zopen_input
 }
 
