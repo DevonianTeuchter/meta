@@ -240,8 +240,10 @@ printElapsedTime()
 
 processConfig()
 {
-  if [ -f "$HOME/.zopen-config" ]; then
-    . "$HOME/.zopen-config"
+  if [ -z $ZOPEN_ROOTFS ]; then
+    if [ -f "$HOME/.zopen-config" ]; then
+      . "$HOME/.zopen-config"
+    fi
   fi
 }
 
@@ -328,5 +330,18 @@ deleteDuplicateEntries()
   value=$1
   delim=$2
   echo "$value$delim" | awk -v RS="$delim" '!($0 in a) {a[$0]; printf("%s%s", col, $0); col=RS; }' | sed "s/${delim}$//"
+}
+
+syslog() {
+  fd=$1
+  type=$2
+  location=$3
+  msg=$4
+  if [ ! -e $fd ]; then
+    mkdir -p "$(dirname $fd)" 
+    touch $fd
+  fi
+  echo $(date +"%F %T") $(id | cut -d' ' -f1)::activity:$type:$location:$msg >> $fd
+  
 }
 zopenInitialize

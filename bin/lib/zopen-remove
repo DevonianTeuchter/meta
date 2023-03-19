@@ -109,6 +109,7 @@ removePackages(){
       [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
 
       removePackageDirectories $pkg
+      syslog $ZOPEN_LOG_PATH/audit.log "DELETED" "${needle}" "version:$version;"
       [ $silent ] || printInfo "${NC}${GREEN}Successfully removed $pkg${NC}"
     fi
   done

@@ -87,6 +87,7 @@ setAlt(){
       fi
       touch "${ZOPEN_PKGINSTALL}/${needle}/.installed"
       symlinkIntoSystem $needle
+      syslog $ZOPEN_LOG_PATH/audit.log "ALT_SET" "${needle}" "version:$version;"
     else
       printInfo "Selection is already current version."
       exit 0

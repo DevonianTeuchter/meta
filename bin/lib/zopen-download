@@ -228,6 +228,7 @@ handlePackageInstall(){
       printError "Could not download from ${downloadURL}"
       continue;
     fi
+    syslog $ZOPEN_LOG_PATH/audit.log "DOWNLOAD" "$pax" "Port downloaded to cache"
   fi
   if [ ! -f "${pax}" ]; then
     printError "${pax} was not found after downloaded!?!"
@@ -313,6 +314,7 @@ EOF
       printVerbose "Marking this version as installed"
       touch "${baseinstalldir}/${name}/.installed"
       installedList="$name $installedList"
+      syslog $ZOPEN_LOG_PATH/audit.log "INSTALL" "$name" "version:$downloadFileVer;install_dir='$baseinstalldir/$installdirname';"
     fi
 
     if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
