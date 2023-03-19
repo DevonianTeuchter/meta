@@ -46,14 +46,14 @@ getContentsFromGithub()
 
 symlinkIntoSystem(){
   if ! $nosymlink; then
-    printInfo "Integrating package into file system"
+    printInfo "- Integrating package into file system"
 
     basedir=$installdir/$name/
     target=$ZOPEN_ROOTFS/usr
     dirs=$(zosfind $basedir -type d | grep -v ".git" | sort -r)
     ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
     dircnt=0
-    printInfo "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+    printInfo "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
     echo "$dirs" | while read dir; do
       dircnt=$(expr $dircnt + 1)
       trimdir=$(echo $dir | sed "s#^$basedir##")
@@ -63,27 +63,27 @@ symlinkIntoSystem(){
         nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
         flecnt=0
         pct=0
-        ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+        ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
         echo "$filestolink" | while read filetolink; do
           flecnt=$(expr $flecnt + 1)
           pct=`expr $flecnt \* 100`
           pct=`expr $pct / $nfiles`
-          ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+          ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
           trimfile=$(echo $filetolink | sed "s#^$basedir##")
           if [ ! -z $trimfile ]; then
             #lnrc=ln -fs $filetolink $target/$trimfile
             if ln -fs $filetolink $target/$trimfile; then
               echo "$target/$trimfile" >> $basedir/.links
             else
-              printInfo "${NC}${RED}Issue with linking '$filetolink' to '$target/$trimfile'${NC}"
-              printInfo "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+              printInfo "${ERASELINE}- ${NC}${RED}Issue with linking '$filetolink' to '$target/$trimfile'${NC}"
+              printInfo "\n${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
             fi
           fi
         done
       fi
     done
-    ansiupdate 3 -30 "${ERASELINE}Processed ${ndirs} of ${ndirs}"
-    printInfo "Integration complete"
+    ansiupdate 3 -30 "${ERASELINE}- Processed ${ndirs} of ${ndirs}"
+    printInfo "- Integration complete"
   fi
 }
 
@@ -114,6 +114,7 @@ handlePackageInstall(){
   if ! contents="$(getContentsFromGithub $releaseURL)"; then
     exit 4;
   fi
+
   #printVerbose "Contents returned: $contents"
   trimmed="$(echo "$contents" | tr -d ' []{}\t\r\n')"
   if [ -z "$trimmed" ]; then
@@ -163,7 +164,7 @@ handlePackageInstall(){
       exit 4;
     fi
     if [ -z "$contents" ]; then
-      printInfo "No latest release published for $name"
+      printInfo "- No latest release published for $name"
       exit 4
     else
       statusline="$(echo "$contents" | grep "\"body\":.*Test Status:.*(.*)<br />")"
@@ -189,7 +190,7 @@ handlePackageInstall(){
       printInfo "Package ${name} is already installed at the requested version: ${downloadFileVer}"
       return;
     fi
-    printInfo "Reinstalling version '$downloadFileVer' of ${name}..."
+    printInfo "- Reinstalling version '$downloadFileVer' of ${name}..."
   fi
 
   printVerbose "Checking if package is not installed but scheduled for upgrade"
@@ -205,10 +206,10 @@ handlePackageInstall(){
   else
     printVerbose "Previous version '${originalFileVersion}' installed"
     if [ -e ${ZOPEN_PKGINSTALL}/${name}/.pinned ]; then
-      printWarning "Version '${originalFileVersion}' has been pinned; upgrade not possible"
+      printWarning "- Version '${originalFileVersion}' has been pinned; upgrade to '${downloadFileVer}' skipped"
       continue;
     else
-      printInfo "Replacing ${name} version '${originalFileVersion}' with '${downloadFileVer}'"
+      printInfo "- Replacing ${name} version '${originalFileVersion}' with '${downloadFileVer}'"
       unInstallOldVersion=true
     fi
   fi
@@ -216,9 +217,9 @@ handlePackageInstall(){
   printVerbose "Checking cache for already downloaded package [file name comparison]"
   pax=$downloadFile
   if [ -f $pax ]; then
-    printInfo "Found existing file '${pax}' in download cache."
+    printInfo "- Found existing file '${pax}' in download cache."
   else
-    printInfo "Downloading release from $repo to cache..."
+    printInfo "- Downloading $pax to cache..."
     if ! $verbose; then
       redirectToDevNull="2>/dev/null"
     fi 
@@ -247,6 +248,8 @@ handlePackageInstall(){
       installdir=$ZOPEN_PKGINSTALL
       paxredirect="-s##$ZOPEN_PKGINSTALL/#"
       printVerbose "Non-local install, extracting with '$paxredirect'"
+    else
+      printInfo "- Local install specified, expanding pax to ."
     fi
   
     printVerbose "Check for existing directory for version '$dirname'"
@@ -286,9 +289,9 @@ handlePackageInstall(){
     if ! $localInstall; then
       symlinkIntoSystem
     fi
-    printVerbose "Checking for env file"
+      printInfo "- Checking for env file"
     if [ -f ${installdir}/${name}/.env ]; then
-      printVerbose ".env file found, adding to profiled processing"
+        printInfo "- .env file found, adding to profiled processing"
       mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
       cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
 curdir=\$(pwd)
@@ -308,10 +311,10 @@ EOF
     if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
       dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
       if $doNotInstallDeps; then
-        printInfo "Skipping dependancy installation"
+        printInfo "- Skipping dependancy installation"
       else
         if [ ! "$dependencies" = "No dependencies" ]; then
-          printInfo "$name depends on: $dependencies"
+          printInfo "- $name depends on: $dependencies"
           installDependencies "$name" "$dependencies"
         fi
       fi
