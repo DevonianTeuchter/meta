@@ -108,12 +108,16 @@ handlePackageInstall(){
   printVerbose "Name:$name;version:$versioned;tag:$tagged;repo:$repo"
   printHeader "Processing package: $name"
 
-  if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases")"; then
+  releaseURL="https://api.github.com/repos/ZOSOpenTools/${repo}/releases"
+  printVerbose "Grabbing list of all releases from $releaseURL"
+  
+  if ! contents="$(getContentsFromGithub $releaseURL)"; then
     exit 4;
   fi
   #printVerbose "Contents returned: $contents"
-  if [ -z "$contents" ]; then
-    printInfo "No releases published for $name"
+  trimmed="$(echo "$contents" | tr -d ' []{}\t\r\n')"
+  if [ -z "$trimmed" ]; then
+    printInfo "- No releases published for $name"
     return
   fi
 
