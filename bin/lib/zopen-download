@@ -48,7 +48,7 @@ symlinkIntoSystem(){
   if ! $nosymlink; then
     printInfo "- Integrating package into file system"
 
-    basedir=$installdir/$name/
+    basedir=$baseinstalldir/$name/
     target=$ZOPEN_ROOTFS/usr
     dirs=$(zosfind $basedir -type d | grep -v ".git" | sort -r)
     ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
@@ -100,7 +100,7 @@ installDependencies()
 handlePackageInstall(){
 
   fullname=$1
-  printVerbose "Checking whether specific version '=' or tag '%' has been specified in '$port'"
+  printVerbose "Name to install: $fullname, parsing any version ('=') or tag ('%') has been specified"
   name=$(echo $fullname | sed -e 's#[=%].*##')
   repo="${name}port"
   versioned="$(echo $fullname | cut -s -d '=' -f 2)"
@@ -122,12 +122,9 @@ handlePackageInstall(){
     return
   fi
 
-  originalTag=""
   originalFileVersion=""
   printVerbose "Checking for meta file at: ${ZOPEN_PKGINSTALL}/${name}/.releaseinfo"
   if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
-    originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
-    printVerbose "Found originalTag=$originalTag (port is already installed)"
     originalFileVersion=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
     printVerbose "Found originalFileVersion=$originalFileVersion (port is already installed)"
   else
@@ -202,7 +199,11 @@ handlePackageInstall(){
       printError "Package ${name} can not be upgraded as it is not installed!"
       continue;
     fi
-    printInfo "Installing ${name}..."
+    unInstallOldVersion=false
+    printInfo "- Installing ${name}..."
+  elif ! $setactive; then
+    printVerbose "Current version '${originalFileVersion}' will remain active"
+    unInstallOldVersion=false
   else
     printVerbose "Previous version '${originalFileVersion}' installed"
     if [ -e ${ZOPEN_PKGINSTALL}/${name}/.pinned ]; then
@@ -237,76 +238,82 @@ handlePackageInstall(){
       printVerbose "Uninstalling any previous version - silently"
       # This will remove any old symlinks or dirs that might have changed in an upgrade
       # for example, even if it's a reinstall [updated file might still be different!]
-      zopen remove ${name} --silent
+      remove=$(zopen remove ${name} --silent)
     fi
-    dirname=${pax%.pax.Z} # Use full pax name as default
-  
-    printInfo "Extracting $pax..."
-    installdir="."
+    installdirname=${pax%.pax.Z} # Use full pax name as default
+
+    printInfo "- Extracting $pax..."
+    baseinstalldir="."
     paxredirect=""
     if ! $localInstall; then
-      installdir=$ZOPEN_PKGINSTALL
-      paxredirect="-s##$ZOPEN_PKGINSTALL/#"
+      baseinstalldir=$ZOPEN_PKGINSTALL
+      paxredirect="-s %[^/]*/%$ZOPEN_PKGINSTALL/$installdirname/%"
       printVerbose "Non-local install, extracting with '$paxredirect'"
     else
       printInfo "- Local install specified, expanding pax to ."
     fi
   
-    printVerbose "Check for existing directory for version '$dirname'"
-    if [ -d $installdir/$dirname ]; then 
-      printInfo "Removing existing directory and contents"
-      rm -rf $installdir/$dirname
+    printVerbose "Check for existing directory for version '$installdirname'"
+    if [ -d $baseinstalldir/$installdirname ]; then 
+      printInfo "- Clearing existing directory and contents"
+      rm -rf $baseinstalldir/$installdirname
     fi
+
     if ! runAndLog "pax -rf $pax -p p $paxredirect ${redirectToDevNull}"; then
-      printWarning "Could not extract $pax. Skipping"
+      printWarning "Errors unpaxing, package directory state unknown"
+      printInfo    "Use zopen alt to select previous version"
       continue;
     fi
     if $localInstall; then
       rm -f "${pax}"
     fi
-    if [ -L $installdir/$name ]; then
-      printVerbose "Removing old symlink '$installdir/$name' and recreating"
-      rm -f $installdir/$name
+
+    if $setactive; then
+      if [ -L $baseinstalldir/$name ]; then
+        printVerbose "Removing old symlink '$baseinstalldir/$name'"
+        rm -f $baseinstalldir/$name
+      fi
+      if ! ln -s $baseinstalldir/$installdirname $baseinstalldir/$name; then
+        printError "Could not create symbolic link name"
+      fi 
     fi 
-  
-    printVerbose "Calculating package install dir (nover/onlyver/buildver)"
-    actualdir=$(pax -f $pax|tail -n 1|cut -f1 -d'/')
-    if ! ln -s $installdir/$actualdir $installdir/$name; then
-      printError "Could not create symbolic link name"
-    fi 
-  
-    printVerbose "Adding version '${originalFileVersion}' to info file"
+
+    printVerbose "Adding version '${downloadFileVer}' to info file"
     # Add file version information as a .releaseinfo file
-    echo "$downloadFileVer" > "${installdir}/${name}/.releaseinfo"
+    echo "$downloadFileVer" > "${baseinstalldir}/$installdirname/.releaseinfo"
 
     # Check for a .version file from the pax - if present good, if not
     # generate one from the file name as the tag isn't granular enough to really
     # be used in dependency checks
-    if [ ! -f "${installdir}/${name}/.version" ]; then
-      echo "$downloadFileVer" > "${installdir}/${name}/.version"
+    if [ ! -f "${baseinstalldir}/$installdirname/.version" ]; then
+      echo "$downloadFileVer" > "${baseinstalldir}/$installdirname/.version"
     fi
 
-    if ! $localInstall; then
+    if $setactive; then
       symlinkIntoSystem
-    fi
+
       printInfo "- Checking for env file"
-    if [ -f ${installdir}/${name}/.env ]; then
+      if [ -f ${baseinstalldir}/${name}/.env ]; then
         printInfo "- .env file found, adding to profiled processing"
-      mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
-      cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
+        mkdir -p $ZOPEN_ROOTFS/etc/profiled/$name
+        cat << EOF > $ZOPEN_ROOTFS/etc/profiled/$name/dotenv
 curdir=\$(pwd)
-cd "$installdir/$name" >/dev/null 2>&1
+cd "$baseinstalldir/$name" >/dev/null 2>&1
 if [ -f ".env" ]; then
   . .env
 fi
 cd \$curdir  >/dev/null 2>&1
 EOF
-      printVerbose "Re-sourcing environment to run any setup"
-      . $HOME/.zopen-config
+        printInfo "- Re-sourcing environment to run any setup"
+        . $HOME/.zopen-config
+      fi
     fi
-    printVerbose "Marking this version as installed"
-    touch "${installdir}/${name}/.installed"
-    installedList="$name $installedList"
+
+    if $setactive; then
+      printVerbose "Marking this version as installed"
+      touch "${baseinstalldir}/${name}/.installed"
+      installedList="$name $installedList"
+    fi
 
     if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
       dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
@@ -336,6 +343,7 @@ installPorts()
 args=$*
 upgradeInstalled=false
 verbose=false
+setActive=true
 downloadOnly=false
 localInstall=false
 reinstall=false
