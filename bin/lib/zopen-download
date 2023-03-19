@@ -146,7 +146,7 @@ handlePackageInstall(){
     # list all released filenames, sort them and grab the last (which should be the newest file starting with the
     # specified prefix (fuzzy find rather than exact match)
     latestfiledetails="$(echo "$contents" | awk -F'/' -v PORT=$name -v REQVER=$versioned '
-      BEGIN{regex = PORT"-"REQVER".*\.pax\.Z"} {if ( $0 ~ regex ){ print $NF"#@#"$0}}
+      BEGIN{regex = "browser_download_url.*"PORT"-"REQVER".*\.pax\.Z"} {if ( $0 ~ regex ){ print $NF"#@#"$0}}
     ' | sort -u | tail -n 1 | tr -d '\"')"
      downloadURL="$(echo $latestfiledetails | sed -E 's/.*url: (https.*)/\1/')"
   elif [ ! "x" = "x$tagged" ]; then
