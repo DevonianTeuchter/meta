@@ -49,7 +49,7 @@ case "$layoutfs" in
   fhs|ibm|prod|zopen)
   ;;
   *)
-    printError "The filesystem layout $layoutfs is unrecognised"
+    printError "${NC}${RED}The filesystem layout $layoutfs is unrecognised"
     ;;
 esac
 printHeader "Initialize zopen framework"
@@ -58,7 +58,7 @@ if [ ! -z "$ZOPEN_ROOT_PATH" ]; then
 fi
 
 if [ -z "$rootfs" ]; then
-  printInfo "Enter the path to your zopen root directory (default: \$HOME/zopen)"
+  printInfo "- Enter fully-qualified path to your zopen root directory (default: \$HOME/zopen)"
   rootfs=$(getInput)
 fi
 
@@ -67,7 +67,7 @@ if [ -z "$rootfs" ]; then
   rootfs="$HOME/zopen"
 fi
 
-echo "Enter the github oauth token for use in zopen-download. If none, press enter"
+echo "- Enter the github oauth token for use in zopen-download. If none (not recommended), press enter"
 zopen_oauth=$(getInputHidden)
 if [ ! -z "$zopen_oauth" ]; then
   zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$zopen_oauth"
@@ -76,7 +76,7 @@ else
   zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN="
 fi
 
-printInfo "Populating standard file system"
+printInfo "- Populating standard file system"
 [[ -e "$rootfs/bin" ]] || mkdir -p "$rootfs/bin"
 [[ -e "$rootfs/etc" ]] || mkdir -p "$rootfs/etc"
 [[ -e "$rootfs/include" ]] || mkdir -p "$rootfs/include"
@@ -84,11 +84,12 @@ printInfo "Populating standard file system"
 [[ -e "$rootfs/usr/share/man" ]] || mkdir -p "$rootfs/usr/share/man"
 [[ -e "$rootfs/usr/share/zopen" ]] || mkdir -p "$rootfs/usr/share/zopen"
 [[ -e "$rootfs/var/cache/zopen" ]] || mkdir -p "$rootfs/var/cache/zopen"
+[[ -e "$rootfs/var/log" ]] || mkdir -p "$rootfs/var/log"
 
-printInfo "Creating path for bootstrap files"
+printInfo "- Creating path for bootstrap files"
 [[ -e "$rootfs/boot" ]] || mkdir -p "$rootfs/boot"
 
-printInfo "Creating symbolic path for prod redirect files"
+printInfo "- Creating symbolic path for prod redirect files"
 [[ -e "$rootfs/usr/share/zopen/boot" ]] || ln -s "$rootfs/boot" "$rootfs/usr/share/zopen/boot"
 case "$layoutfs" in
   "fhs")
@@ -107,12 +108,13 @@ esac
 [[ -e "$rootfs/$zopen_pkginstall" ]] || mkdir -p "$rootfs/$zopen_pkginstall"
 [[ -e "$rootfs/usr/share/zopen/prod" ]] || ln -s "$rootfs/$zopen_pkginstall" "$rootfs/usr/share/zopen/prod"
 
-printInfo "Creating path for certificate lookups"
+printInfo "- Creating path for certificate lookups"
 ZOPEN_CA_DIR="etc/pki/tls/certs"  # TODO: Work out "proper" location
 [[ -e "$rootfs/$ZOPEN_CA_DIR" ]] || mkdir -p "$rootfs/$ZOPEN_CA_DIR"
 
 # Save the configuration to the file
-echo "export ZOPEN_ROOTFS=$rootfs" > "$HOME/.zopen-config"
+echo "ZOPEN_ROOTFS=$rootfs" > "$HOME/.zopen-config"
+echo "export ZOPEN_ROOTFS" >> "$HOME/.zopen-config"
 
 # Add the profiled processing first so the zopen paths are added first
 cat << EOF >>  "$HOME/.zopen-config"
@@ -130,38 +132,56 @@ deleteDuplicateEntries()
   echo "\$value\$delim" | awk -v RS="\$delim" '!(\$0 in a) {a[\$0]; printf("%s%s", col, \$0); col=RS; }' | sed "s/\${delim}$//"
 }
 $zopen_oauth
-export ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall
-export ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/
-export ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem
-export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
-export PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
-export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
-export LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
-export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
-export MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
+ZOPEN_PKGINSTALL=\$ZOPEN_ROOTFS/$zopen_pkginstall
+export ZOPEN_PKGINSTALL
+ZOPEN_SEARCH_PATH=\$ZOPEN_ROOTFS/usr/share/zopen/
+export ZOPEN_SEARCH_PATH
+ZOPEN_CA=\$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem
+export ZOPEN_CA
+ZOPEN_LOG_PATH=\$ZOPEN_ROOTFS/var/log
+export ZOPEN_LOG_PATH
+PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
+LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
+LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
+MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
 
 if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
-  for FILE in \$( find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print )
-  do
+    dotenvs=\$(find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print)
+    dotenvcnt=\$(echo "$dotenvs" | wc -l | tr -d ' ')
+    echo "- Processing zopen dotenv configs..."
+    flecnt=0
+    /bin/echo "- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
+    echo "\$dotenvs" | while read FILE; do
+      flecnt=\$(expr \$flecnt + 1)
+      pct=\$(expr \$flecnt \* 100)
+      pct=\$(expr \$pct / \$dotenvcnt)
+    /bin/echo "\047[1A\047[$30D\047[2K- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
     . \$FILE
-    export PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
-    export PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
-    export LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
-    export LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
-    export MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
-    export MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
+    PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+    PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
+    LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
+    LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
+    MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
+    MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
   done
+  /bin/echo "\047[1A\047[\$30D\047[2K- Processed 100% (\${dotenvcnt}/\${dotenvcnt})"
+  unset dotenvs dotenvcnt flecnt
 fi
+export MANPATH
+export LIBPATH
+export PATH
 EOF
 
-printInfo "Created config in $HOME/.zopen-config. Updating environment"
+printInfo "- Created config in $HOME/.zopen-config. Updating environment"
 . "$HOME/.zopen-config"
-printInfo "Root FS available at $ZOPEN_ROOTFS"
-printInfo "Running bootstrap"
-runAndLog "${utildir}/zopen-bootstrap.rexx"
-printVerbose "Downloaded bootstrapped curl. Configuring for use"
+printInfo "- Root FS available at $ZOPEN_ROOTFS"
+printInfo "- Running bootstrap"
+bootstrap=$("${utildir}/zopen-bootstrap.rexx")
+printInfo "- Bootstrapped curl downloaded. Configuring for use..."
 # Need to source the .env file from within the actual curl directory and cannot
-# spawn sub-processes so run inline
+# spawn sub-process otherwise no access to environment from this script so run inline
 curlfile="$(ls $rootfs/boot |grep curl)"
 chmod -R 755 $rootfs/boot/$curlfile
 curwd=$PWD
@@ -169,13 +189,22 @@ cd $rootfs/boot/$curlfile/
 . .env
 cd $curwd
 
-printInfo "Updating CA cert"
+printInfo "- Updating CA cert [to resolve previous SSL_CERT_FILE warnings]"
 runAndLog "${utildir}/zopen-update-cacert -i -f"
 runAndLog "${utildir}/zopen-download curl"
-printInfo "Merging meta package into zopen system"
+printInfo "Merging latest meta package into zopen system"
 runAndLog "${utildir}/zopen-download meta"
-printInfo "Sourcing .zopen-config into environment"
-. $HOME/.zopen-config
-printInfo "Initialisation complete."
+printInfo "- Configuration complete."
+printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
+
+profileEnable=$(getInput)
+if [ -z profileEnable ] & [ "xyx" = "x${profileEnable}x" ]; then
+  if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
+    printVerbose "Line not present (grep returned non-0)"
+    echo ". \$HOME/.zopen-config" >> $HOME/.profile
+  fi
+fi
+printInfo "${NC}${YELLOW}- Run '. \$HOME/.zopen-config' to enable zopen environment for current session${NC}"
+printInfo "${NC}${GREEN}zopen initialization complete.${NC}"
 
 
