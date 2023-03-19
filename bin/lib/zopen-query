@@ -159,7 +159,7 @@ printInstalledEntries(){
 
 downloadRepos()
 {
-    printVerbose "Downloading latest information from repo"
+    printVerbose "Downloading latest information from repo(s): $repoArray"
     echo "$repoArray" | xargs | tr ' ' '\n' | sort | while read repo; do
     name=${repo%port}
     if ! latest_url="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
@@ -240,7 +240,7 @@ downloadRepos()
 done
 }
 
-checkProvides(){
+whatProvides(){
   needle=$1
   found=$(zosfind $ZOPEN_ROOTFS/usr -name "${needle}")
   printVerbose "Found? '$found'"
@@ -320,7 +320,7 @@ while [[ $# -gt 0 ]]; do
       verbose=true
       ;;
     *)
-      packageList="$packageList $1";
+      chosenRepos="$chosenRepos $1";
       ;;
   esac
   shift;
@@ -388,5 +388,5 @@ fi
 [[ -z "$remotesearch" ]] || printDetailListEntries $details $needle
 [[ -z "$list" ]] || printDetailListEntries $details
 [[ -z "$installed" ]] || printInstalledEntries $details
-[[ -z "$whatprovides" ]] || checkProvides $needle
+[[ -z "$whatprovides" ]] || whatProvides $needle
 downloadRepos
