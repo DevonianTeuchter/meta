@@ -7,19 +7,19 @@ printSyntax()
   echo "" >&2
   echo "Syntax: zopen <command>" >&2
   echo "where <command> may be one of the following:" >&2
-  echo " init: generate $HOME/.zopen-config; builds file structure; bootstraps" >&2
-  echo " build: invokes the build script." >&2
-  echo " download: downloads z/OS Open Tool package(s)" >&2
-  echo " install: installs z/OS Open Tool package(s))" >&2
-  echo " generate: generate a zopen project" >&2
-  echo " update-cacert: update the cacert.pem file" >&2
-  echo " upgrade: upgrades already installed tools" >&2
-  echo " list: lists information about zOpen Tool packages" >&2
-  echo " query: queries zOpen Tool packages (see " >&2
-  echo " search: searches remote repo for zOpen Tool package" >&2
-  echo " remove: removes installed zOpen Tool packages" >&2
-  echo " alt: switch local versions of zOpen Tool packages" >&2
-  echo " clean: cleans various aspects of zOpen Tool packages" >&2
+  printf "%-15s %-50s" "init:" "generate $HOME/.zopen-config; builds file structure; bootstraps" >&2
+  printf "%-15s %-50s" "build:" "invokes the build script." >&2
+  printf "%-15s %-50s" "download:" "downloads z/OS Open Tool package(s)" >&2
+  printf "%-15s %-50s" "install:" "installs z/OS Open Tool package(s))" >&2
+  printf "%-15s %-50s" "generate:" "generate a zopen project" >&2
+  printf "%-15s %-50s" "update-cacert:" "update the cacert.pem file" >&2
+  printf "%-15s %-50s" "upgrade:" "upgrades already installed tools" >&2
+  printf "%-15s %-50s" "list:" "lists information about zOpen Tool packages" >&2
+  printf "%-15s %-50s" "query:" "queries zOpen Tool packages (see " >&2
+  printf "%-15s %-50s" "search:" "searches remote repo for zOpen Tool package" >&2
+  printf "%-15s %-50s" "remove:" "removes installed zOpen Tool packages" >&2
+  printf "%-15s %-50s" "alt:" "switch local versions of zOpen Tool packages" >&2
+  printf "%-15s %-50s" "clean:" "cleans various aspects of zOpen Tool packages" >&2
   echo "" >&2
 }
 
@@ -28,6 +28,7 @@ printHelp()
   args=$*
   echo "zopen is a general purpose script to be used with the ZOSOpenTools ports." >&2
   printSyntax
+  printf "%-15s %-15s %-15s %-15s\n${NC}" "Repo" "Your version" ".version" "Latest Tag"
   echo "Example usage:" >&2
   echo " # Build a port" >&2
   echo " zopen build -v # Build port" >&2
@@ -45,33 +46,37 @@ export bindir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
 args=$*
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    "alt")
+      shift
+      exec "${bindir}/lib/zopen-alt" $@
+      ;;
     "build")
       shift
       exec "${bindir}/lib/zopen-build" $@
       ;;
+    "clean")
+      shift
+      exec "${bindir}/lib/zopen-clean" $@
+      ;;
     "download")
       shift
-      exec "${bindir}/lib/zopen-download" -d $@
-      ;;
-    "install")
-      shift
       exec "${bindir}/lib/zopen-download" $@
-      ;;
-    "upgrade" | "up")
-      shift
-      exec "${bindir}/lib/zopen-download" -u $@
       ;;
     "generate")
       shift
       exec "${bindir}/lib/zopen-generate" $@
       ;;
-    "update-cacert")
-      shift
-      exec "${bindir}/lib/zopen-update-cacert" $@
+    "help" | "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printHelp "${args}"
+      exit 0
       ;;
     "init")
       shift
       exec "${bindir}/lib/zopen-init" $@
+      ;;
+    "install" | "-i")
+      shift
+      exec "${bindir}/lib/zopen-download" $@
       ;;
     "list" | "-l")
       shift
@@ -81,25 +86,21 @@ while [[ $# -gt 0 ]]; do
       shift
       exec "${bindir}/lib/zopen-query" $@
       ;;
-    "search" | "-s")
-      shift
-      exec "${bindir}/lib/zopen-query" --remote-search $@
-      ;;
     "remove" | "-r" | "uninstall" | "un" | "erase" | "e")
       shift
       exec "${bindir}/lib/zopen-remove" $@
       ;;
-    "alt" | "-a")
+    "search" | "-s")
       shift
-      exec "${bindir}/lib/zopen-alt" $@
+      exec "${bindir}/lib/zopen-query" --remote-search $@
       ;;
-    "clean")
+    "update-cacert")
       shift
-      exec "${bindir}/lib/zopen-clean" $@
+      exec "${bindir}/lib/zopen-update-cacert" $@
       ;;
-    "help" | "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
-      printHelp "${args}"
-      exit 0
+    "upgrade" | "up")
+      shift
+      exec "${bindir}/lib/zopen-download" -u $@
       ;;
     *)
       printSoftError "Unknown option ${1} specified"
