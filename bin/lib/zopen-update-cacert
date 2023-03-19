@@ -80,7 +80,7 @@ updateCACert()
 export mydir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
 
 . "${mydir}/common.inc"
-
+verbose=false
 export default_dir="$( cd "${mydir}/../../" && pwd -P )"
 export cacert_update_url="https://curl.se/ca/cacert.pem"
 
