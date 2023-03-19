@@ -171,6 +171,7 @@ handlePackageInstall(){
       fi
     fi
   fi
+
   if [ "x" = "x$downloadURL" ]; then
     printError "Unable to determine download location for ${name}"
   fi
@@ -293,7 +294,7 @@ if [ -f ".env" ]; then
 fi
 cd \$curdir  >/dev/null 2>&1
 EOF
-      printVerbose "Re-sourcing environment"
+      printVerbose "Re-sourcing environment to run any setup"
       . $HOME/.zopen-config
     fi
     printVerbose "Marking this version as installed"
@@ -389,9 +390,9 @@ if [ -z "${chosenRepos}" ] && ! $all; then
 fi
 
 if $all; then
-  printInfo "Enter 'all' to confirm full installation [takes a long time!]:"
+  printInfo "Enter 'all' to confirm full installation [takes a long time so be sure!]:"
   confirmall=$(getInput)
-  if [ ! "xall" = "x$confirmall" ]; then
+  if [ ! "xall" = "x${confirmall}" ]; then
     printError "Cancelling full installation"
   fi
 fi
@@ -441,6 +442,7 @@ printVerbose "Working directory: ${downloadDir}"
 # Parse repositories for zopen framework repos
 foundPort=false
 installArray=""
+
 for repo in $(echo ${repo_results}); do
   repo=${repo#"ZOSOpenTools/"}
   name=${repo%port}
@@ -452,7 +454,7 @@ for repo in $(echo ${repo_results}); do
 
   if $all; then
     # Installing everything ?!?!?
-    installArray="$installArray $repo"
+    installArray="$installArray $name"
     continue;
   fi
   for chosenRepo in $(echo "${chosenRepos}" | tr ',' '\n'); do
