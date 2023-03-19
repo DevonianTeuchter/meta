@@ -155,6 +155,42 @@ handlePackageInstall(){
       
     ' | sort -u | tail -n 1 | tr -d '\"')"
     downloadURL="$(echo $taggeddetails | tr -d "\"" | sed -E 's/.*url: (https.*)/\1/')"
+  elif $selectVersion; then
+    # Explicitly allow the user to select a release to install; useful if there are broken installs
+    # as a known good release can be found, selected and pinned!
+    printVerbose "List individual releases and allow selection"
+    i=0
+    TMP_FIFO_PIPE="$HOME/altselect.pipe"
+    [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
+    mkfifo $TMP_FIFO_PIPE
+    #"browser_download_url":"https://github.com/ZOSOpenTools/bisonport/releases/download/bisonport_19/bison-3.8.20220607_210636.zos.pax.Z"
+    latestfiledetails="$(echo "$contents" | awk -F'/' -v PORT=$name -v REQVER=$versioned '
+      BEGIN{regex = "browser_download_url.*"PORT"-"REQVER".*\.pax\.Z"} {if ( $0 ~ regex ){ sub(/\"browser_download_url\":/, ""); print}}
+    ' | sort -u | tr -d " ")"
+
+    printInfo "Versions available for install:"
+    echo "$latestfiledetails" | xargs | tr ' ' '\n'>> $TMP_FIFO_PIPE &
+      while read repo; do
+        i=$(expr $i + 1)
+        printInfo "  $i: $(echo $repo | sed -E 's/.*-(.*)\.zos\.pax\.Z/\1/')"
+      done < $TMP_FIFO_PIPE
+    [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
+    printVerbose "Getting user selection"
+    valid=false
+    while ! $valid; do
+      echo "Enter version to install (1-$i): "
+      selection=$(getInput)
+      if [[ ! -z "$(echo $selection | sed -e 's/[0-9]*//')" ]]; then
+        echo "Invalid input, must be a number between 1 and $i"
+      elif [ "$selection" -ge 1 ] && [ "$selection" -le "$i" ]; then
+        valid=true
+      fi
+    done
+    downloadURL="$(echo $latestfiledetails | awk -v selection=$selection '
+      BEGIN {count=0}
+            {count = count + 1; if (count=selection) { print $(selection)} }
+    ' | tr -d "\"" )"
+    printInfo "- Using version: $selection: $downloadURL"
   else
     printVerbose "No explicit version/tag, using latest"
     if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
@@ -345,6 +381,7 @@ installPorts()
 args=$*
 upgradeInstalled=false
 verbose=false
+selectVersion=false
 setActive=true
 downloadOnly=false
 localInstall=false
@@ -386,6 +423,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--all")
       all=true
+      ;;
+    "--select")
+      selectVersion=true
       ;;
     "-v" | "--v" | "-verbose" | "--verbose")
       verbose=true
