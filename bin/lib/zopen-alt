@@ -62,7 +62,7 @@ setAlt(){
     while ! $valid; do
       echo "Enter alternative version to use (1-$i): "
       selection=$(getInput)
-      if [[ ! -z "$(echo $selection | sed -e 's/[0-9]//')" ]]; then
+      if [[ ! -z "$(echo $selection | sed -e 's/[0-9]*//')" ]]; then
         echo "Invalid input, must be a number between 1 and $i"
       elif [ "$selection" -ge 1 ] && [ "$selection" -le "$i" ]; then
         valid=true
@@ -87,6 +87,10 @@ setAlt(){
       fi
       touch "${ZOPEN_PKGINSTALL}/${needle}/.installed"
       symlinkIntoSystem $needle
+      version="unknown"
+      if [ -e "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo" ]; then
+        version=$(cat "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo")
+      fi
       syslog $ZOPEN_LOG_PATH/audit.log "ALT_SET" "${needle}" "version:$version;"
     else
       printInfo "Selection is already current version."
