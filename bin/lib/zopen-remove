@@ -17,31 +17,31 @@ printSyntax()
 }
 
 unsymlinkFromSystem1(){
-  [ $silent ] || printInfo "- Locating dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
+  [ $silent ] && printInfo "- Locating dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
   filestounlink=$(zosfind $ZOPEN_ROOTFS/usr/ -type l -exec test ! -e {} \; -print )
   nfiles=$(echo "$filestounlink" | wc -l | tr -d ' ')
   flecnt=0
   pct=0
-  [ $silent ] || echo "- Processing ${pct}% (${flecnt}/${nfiles})"
+  [ $silent ] && echo "- Processing ${pct}% (${flecnt}/${nfiles})"
   echo "$filestounlink" | while read filetounlink; do
-    if ! $silent; then
+    if [ ! $silent ]; then
       flecnt=$(expr $flecnt + 1)
-      pct=`expr $flecnt \* 100`
-      pct=`expr $pct / $nfiles`
+      pct=$(expr $flecnt \* 100)
+      pct=$(expr $pct / $nfiles)
       ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
     fi
     rm -f $filetounlink
   done
-  [[ $silent ]] || ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+  [[ $silent ]] && ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
 }
 unsymlinkFromSystemVerbose(){
   pkg=$1
   if [ -e $ZOPEN_PKGINSTALL/$pkg/.links ]; then
-    [ $silent ] || printInfo "- Removing dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
+    [ $silent ] && printInfo "- Removing dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
     nfiles=$(cat $ZOPEN_PKGINSTALL/$pkg/.links | wc -l  | tr -d ' ')
     flecnt=0
     pct=0
-    [ $silent ] || echo "- Processing ${pct}% (${flecnt}/${nfiles})"
+    [ $silent ] && printInfo "- Processing ${pct}% (${flecnt}/${nfiles})"
     cat "$ZOPEN_PKGINSTALL/$pkg/.links" | while read filetounlink; do
       if ! $silent; then
         flecnt=$(expr $flecnt + 1)
@@ -55,12 +55,12 @@ unsymlinkFromSystemVerbose(){
     done
   else
     # Slower fallback for if package does not have .links meta
-    [ $silent ] || printInfo "- Locating dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
+    [ $silent ] && printInfo "- Locating dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
     filestounlink=$(zosfind $ZOPEN_ROOTFS/usr/ -type l -exec test ! -e {} \; -print )
     nfiles=$(echo "$filestounlink" | wc -l | tr -d ' ')
     flecnt=0
     pct=0
-    [ $silent ] || echo "- Processing ${pct}% (${flecnt}/${nfiles})"
+    [ $silent ] && echo "- Processing ${pct}% (${flecnt}/${nfiles})"
     echo "$filestounlink" | while read filetounlink; do
       if ! $silent; then
         flecnt=$(expr $flecnt + 1)
@@ -77,7 +77,7 @@ unsymlinkFromSystemVerbose(){
 }
 removePackageDirectories(){
   pkg=$1
-  [ $silent ] || printInfo "- Removing any directories associated with package"
+  [ $silent ] && printInfo "- Removing any directories associated with package"
   zosfind $ZOPEN_ROOTFS/usr/ -type d -name $pkg -print | sort -r | while read rmdir; do
     printVerbose "Removing orphaned directory: $rmdir"  
     rm -rf $rmdir
@@ -86,31 +86,36 @@ removePackageDirectories(){
 removePackages(){
   pkglist=$*
   echo "$pkglist" | xargs | tr ' ' '\n' | sort | while read pkg; do
-    [ $silent ] || printHeader "Processing package: $pkg"
-    [ $silent ] || printInfo "- Checking status of package '$pkg'"
-    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.installed ] && ! $silent; then 
-      printInfo "${NC}${YELLOW}Package '$pkg' is not installed${NC}"
+    [ $silent ] && printHeader "Processing package: $pkg"
+    [ $silent ] && printInfo "- Checking status of package '$pkg'"
+    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.installed ]; then 
+      [ $silent ] && printInfo "${NC}${YELLOW}Package '$pkg' is not installed${NC}"
     else
-      [ $silent ] || printInfo "- Package installed, unmeshing from system"
+      [ $silent ] && printInfo "- Package installed, unmeshing from system"
+      version="unknown"
+      if [ -e "${ZOPEN_PKGINSTALL}/${pkg}/.releaseinfo" ]; then
+        version=$(cat "${ZOPEN_PKGINSTALL}/${pkg}/.releaseinfo")
+      fi
       unsymlinkFromSystemVerbose $pkg
       if [ -e $ZOPEN_PKGINSTALL/$pkg ]; then
         deref=$(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P | awk -F/ '{ print $(NF)}')
         if $purge; then
-          [ $silent ] || printInfo "- Purging package"
+          [ $silent ] && printInfo "- Purging package"
           rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
+          syslog $ZOPEN_LOG_PATH/audit.log "PURGE" "${pkg}" "version:$version;"
         else
-          [ $silent ] || printInfo "Removing metadata file to mark uninstall"
+          [ $silent ] && printInfo "- Removing metadata file to mark uninstall"
           rm -f $ZOPEN_PKGINSTALL/$pkg/.installed
         fi
       fi
-      [ $silent ] || printInfo "- Breaking link from current to versioned"
+      [ $silent ] && printInfo "- Breaking link from current to versioned"
       rm -f $ZOPEN_PKGINSTALL/$pkg/
-      [ $silent ] || printInfo "- Removing profiled entry"
+      [ $silent ] && printInfo "- Removing profiled entry"
       [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
 
       removePackageDirectories $pkg
       syslog $ZOPEN_LOG_PATH/audit.log "DELETED" "${needle}" "version:$version;"
-      [ $silent ] || printInfo "${NC}${GREEN}Successfully removed $pkg${NC}"
+      [ $silent ] && printInfo "${NC}${GREEN}Successfully removed $pkg${NC}"
     fi
   done
 }
