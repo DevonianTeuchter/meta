@@ -442,9 +442,15 @@ while [[ $# -gt 0 ]]; do
   shift;
 done
 
-if [ -z "${chosenRepos}" ] && ! $all; then
+if [ -z "${chosenRepos}" ]; then
+  if ! $all && ! $upgradeInstalled; then
     printInfo "No ports selected for installation"
     exit 4
+  fi
+  if ! $all && $upgradeInstalled; then
+    printVerbose "No specific port to upgrade, upgrade all"
+    all=true
+  fi
 fi
 
 if $all; then
