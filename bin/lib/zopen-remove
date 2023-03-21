@@ -102,7 +102,7 @@ removePackages(){
         if $purge; then
           [ $silent ] && printInfo "- Purging package"
           rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
-          syslog $ZOPEN_LOG_PATH/audit.log "PURGE" "${pkg}" "version:$version;"
+          syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Prurging package:'${needle};version:$version;"
         else
           [ $silent ] && printInfo "- Removing metadata file to mark uninstall"
           rm -f $ZOPEN_PKGINSTALL/$pkg/.installed
@@ -114,7 +114,7 @@ removePackages(){
       [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
 
       removePackageDirectories $pkg
-      syslog $ZOPEN_LOG_PATH/audit.log "DELETED" "${needle}" "version:$version;"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Removed package:'${needle};version:$version;"
       [ $silent ] && printInfo "${NC}${GREEN}Successfully removed $pkg${NC}"
     fi
   done

@@ -205,6 +205,7 @@ if [ -z profileEnable ] & [ "xyx" = "x${profileEnable}x" ]; then
   fi
 fi
 printInfo "${NC}${YELLOW}- Run '. \$HOME/.zopen-config' to enable zopen environment for current session${NC}"
+syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_FILE" "INIT" "" "zopen environment initialised as $ZOPEN_ROOTFS"
 printInfo "${NC}${GREEN}zopen initialization complete.${NC}"
 
 

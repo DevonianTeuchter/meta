@@ -244,6 +244,7 @@ handlePackageInstall(){
     printVerbose "Previous version '${originalFileVersion}' installed"
     if [ -e ${ZOPEN_PKGINSTALL}/${name}/.pinned ]; then
       printWarning "- Version '${originalFileVersion}' has been pinned; upgrade to '${downloadFileVer}' skipped"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_INSTALL" "DOWNLOAD" "handlePackageInstall" "Attempt to change pinned package '${name}' skipped"
       continue;
     else
       printInfo "- Replacing ${name} version '${originalFileVersion}' with '${downloadFileVer}'"
@@ -264,7 +265,7 @@ handlePackageInstall(){
       printError "Could not download from ${downloadURL}"
       continue;
     fi
-    syslog $ZOPEN_LOG_PATH/audit.log "DOWNLOAD" "$pax" "Port downloaded to cache"
+    syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_NETWORK,$CAT_PACKAGE,$CAT_FILE" "DOWNLOAD" "handlePackageInstall" "Downloaded remote file '$pax' to cache"
   fi
   if [ ! -f "${pax}" ]; then
     printError "${pax} was not found after downloaded!?!"
@@ -350,7 +351,7 @@ EOF
       printVerbose "Marking this version as installed"
       touch "${baseinstalldir}/${name}/.installed"
       installedList="$name $installedList"
-      syslog $ZOPEN_LOG_PATH/audit.log "INSTALL" "$name" "version:$downloadFileVer;install_dir='$baseinstalldir/$installdirname';"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_INSTALL,$CAT_PACKAGE" "DOWNLOAD" "handlePackageInstall" "Installed package:'$name';version:$downloadFileVer;install_dir='$baseinstalldir/$installdirname';"
     fi
 
     if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then

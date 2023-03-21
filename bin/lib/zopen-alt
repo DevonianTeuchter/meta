@@ -95,7 +95,7 @@ setAlt(){
       if [ -e "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo" ]; then
         version=$(cat "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo")
       fi
-      syslog $ZOPEN_LOG_PATH/audit.log "ALT_SET" "${needle}" "version:$version;"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE" "ALT" "setAlt" "Set '${needle}' to version:$version;"
     else
       printInfo "Selection is already current version."
       exit 0
@@ -128,12 +128,14 @@ listAlts(){
 
     if [[ "${repo}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
       printVerbose "Working around possible bug in FIFO that converts initial char to alert/bell 0x07/'\a'"
-      if ! odloc="$(type "$od")" || [[ -z $odloc ]]; then
+      if ! $(type od); then
+        printVerbose "Displaying erroneous string"
         out=$(echo "${repo}" | od -cx)
         printVerbose "String details:\n '$out'"
       fi
       repo="/$(echo $repo | cut -b 2-)"
       printVerbose "Repo:='$repo'"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_W "$CAT_FILE,$CAT_SYS" "ALT" "listAlts" "FIFO character issue while reading from $TMP_FIFO_PIPE. Workaround applied"
     fi
     i=$(expr $i + 1)
     if [[ "${deref#$ZOPEN_PKGINSTALL/}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
