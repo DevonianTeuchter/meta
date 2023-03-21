@@ -36,17 +36,21 @@ symlinkIntoSystem(){
         mkdir -p $target/$trimdir
         filestolink=$(zosfind $dir -type f)
         nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
-        flecnt=0
-        pct=0
-        ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-        echo "$filestolink" | while read filetolink; do
-          flecnt=$(expr $flecnt + 1)
-          pct=`expr $flecnt \* 100`
-          pct=`expr $pct / $nfiles`
+        if [ $nfiles -eq 0 ]; then
+          flecnt=0
+          pct=0
           ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-          trimfile=$(echo $filetolink | sed "s#^$basedir##")
-          ln -fs $filetolink $target/$trimfile
-        done
+          echo "$filestolink" | while read filetolink; do
+            flecnt=$(expr $flecnt + 1)
+            pct=`expr $flecnt \* 100`
+            pct=`expr $pct / $nfiles`
+            ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+            trimfile=$(echo $filetolink | sed "s#^$basedir##")
+            if [ ! -z "$trimfile" ]; then
+              ln -fs $filetolink $target/$trimfile
+            fi
+          done
+        fi
       fi
     done
     ansiupdate 3 -30 "${ERASELINE}Processed ${ndirs} of ${ndirs}"
@@ -85,8 +89,8 @@ setAlt(){
       if ! ln -sf $newver $ZOPEN_PKGINSTALL/$needle; then
         printError "Could not create symbolic link name"
       fi
-      touch "${ZOPEN_PKGINSTALL}/${needle}/.installed"
       symlinkIntoSystem $needle
+      touch "${ZOPEN_PKGINSTALL}/${needle}/.installed"
       version="unknown"
       if [ -e "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo" ]; then
         version=$(cat "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo")
