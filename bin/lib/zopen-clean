@@ -39,6 +39,18 @@ cleanUnused(){
   mkfifo $TMP_FIFO_PIPE
   echo "$found" | xargs | tr ' ' '\n'>> $TMP_FIFO_PIPE &
   while read repo; do
+    printVerbose "Parsing repo: '$repo' as '${repo#$ZOPEN_PKGINSTALL/}'"
+    if [[ "${repo}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
+      printVerbose "Working around possible bug in FIFO that converts initial char to alert/bell 0x07/'\a'"
+      if ! $(type od); then
+        printVerbose "Displaying erroneous string"
+        out=$(echo "${repo}" | od -cx)
+        printVerbose "String details:\n '$out'"
+      fi
+      repo="/$(echo $repo | cut -b 2-)"
+      printVerbose "Repo:='$repo'"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_W "$CAT_FILE,$CAT_SYS" "CLEAN" "cleanUnused" "FIFO character issue while reading from $TMP_FIFO_PIPE. Workaround applied"
+    fi
     i=$(expr $i + 1)
     if [[ "${deref#$ZOPEN_PKGINSTALL/}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
       current=$i
@@ -46,20 +58,25 @@ cleanUnused(){
     else
       printInfo "Command to run rm -rf $repo" 
       printInfo "$i: ${repo#$ZOPEN_PKGINSTALL/} <- Removed"
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_FILE,$CAT_PACKAGE,$CAT_REMOVE" "CLEAN" "cleanUnused" "Removed unused package at ${repo#$ZOPEN_PKGINSTALL/} "
     fi
   done < $TMP_FIFO_PIPE
   [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
 }
 cleanDangling(){
   printVerbose "Removing dangling symlinks from the file structure"
+  flecnt=0
   zosfind $ZOPEN_ROOTFS -type l -exec test ! -e {} \; -print | while read sl; do
     printVerbose "Removing symlink '$sl'"
     rm -f $sl
+    flecnt=$(expr $flecnt + 1)
   done
+  syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_FILE" "CLEAN" "cleanDangling" "zopen system scanned for dangling symlinks; $flecnt link(s) removed"
 }
 cleanCache(){
   printVerbose "Cleaning $ZOPEN_ROOTFS/var/cache/zopen"
   rm -rf $ZOPEN_ROOTFS/var/cache/zopen/*
+  syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_FILE" "CLEAN" "cleanCache" "Main cache in $ZOPEN_ROOTFS/var/cache/zopen cleared"
 }
 
 # Main code start here
