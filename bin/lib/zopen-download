@@ -50,7 +50,7 @@ symlinkIntoSystem(){
 
     basedir=$baseinstalldir/$name/
     target=$ZOPEN_ROOTFS/usr
-    dirs=$(zosfind $basedir -type d | grep -v ".git" | sort -r)
+    dirs=$(zosfind $basedir -type d | grep -v "\.git" | sort -r)
     ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
     dircnt=0
     printInfo "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
@@ -92,9 +92,12 @@ installDependencies()
   name=$1
   dependencies=$2
   printVerbose "List of dependencies to install: $dependencies"
+  local skipupgrade_lcl=$skipupgrade
+  skipupgrade=true
   echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
-    handlePackageInstall $dep
+    handlePackageInstall $dep 
   done
+  skipupgrade=$skipupgrade_lcl
 )
 
 handlePackageInstall(){
@@ -237,6 +240,9 @@ handlePackageInstall(){
     fi
     unInstallOldVersion=false
     printInfo "- Installing ${name}..."
+  elif $skipupgrade; then
+    printInfo "Package ${name} has a newer release '${downloadFileVer}' but explicitly skipping"
+    continue;
   elif ! $setactive; then
     printVerbose "Current version '${originalFileVersion}' will remain active"
     unInstallOldVersion=false
@@ -349,20 +355,20 @@ EOF
 
     if $setactive; then
       printVerbose "Marking this version as installed"
-      touch "${baseinstalldir}/${name}/.installed"
+      touch "${baseinstalldir}/${name}/.active"
       installedList="$name $installedList"
       syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_INSTALL,$CAT_PACKAGE" "DOWNLOAD" "handlePackageInstall" "Installed package:'$name';version:$downloadFileVer;install_dir='$baseinstalldir/$installdirname';"
     fi
 
-    if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
+    if $doNotInstallDeps; then
+        printInfo "- Skipping dependency installation"
+    elif $reinstall; then
+      printVerbose "- Reinstalling so no dependency reinstall (unless explicitly listed)"
+    elif echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
       dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
-      if $doNotInstallDeps; then
-        printInfo "- Skipping dependancy installation"
-      else
-        if [ ! "$dependencies" = "No dependencies" ]; then
-          printInfo "- $name depends on: $dependencies"
-          installDependencies "$name" "$dependencies"
-        fi
+      if [ ! "$dependencies" = "No dependencies" ]; then
+        printInfo "- $name depends on: $dependencies"
+        installDependencies "$name" "$dependencies"
       fi
     fi
     printInfo "${NC}${GREEN}Successfully installed $name${NC}"
@@ -389,6 +395,7 @@ localInstall=false
 reinstall=false
 installOrUpgrade=false
 nosymlink=false
+skipupgrade=false
 doNotInstallDeps=false
 all=false
 chosenRepos=""
@@ -421,6 +428,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--no-set-active")
       setactive=false
+      ;;
+    "--skip-upgrade")
+      skipupgrade=true
       ;;
     "--all")
       all=true

@@ -36,7 +36,7 @@ symlinkIntoSystem(){
         mkdir -p $target/$trimdir
         filestolink=$(zosfind $dir -type f)
         nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
-        if [ $nfiles -eq 0 ]; then
+        if [ ! $nfiles -eq 0 ]; then
           flecnt=0
           pct=0
           ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
@@ -90,7 +90,7 @@ setAlt(){
         printError "Could not create symbolic link name"
       fi
       symlinkIntoSystem $needle
-      touch "${ZOPEN_PKGINSTALL}/${needle}/.installed"
+      touch "${ZOPEN_PKGINSTALL}/${needle}/.active"
       version="unknown"
       if [ -e "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo" ]; then
         version=$(cat "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo")

@@ -88,7 +88,7 @@ removePackages(){
   echo "$pkglist" | xargs | tr ' ' '\n' | sort | while read pkg; do
     [ $silent ] && printHeader "Processing package: $pkg"
     [ $silent ] && printInfo "- Checking status of package '$pkg'"
-    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.installed ]; then 
+    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.active ]; then 
       [ $silent ] && printInfo "${NC}${YELLOW}Package '$pkg' is not installed${NC}"
     else
       [ $silent ] && printInfo "- Package installed, unmeshing from system"
@@ -105,7 +105,7 @@ removePackages(){
           syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Prurging package:'${needle};version:$version;"
         else
           [ $silent ] && printInfo "- Removing metadata file to mark uninstall"
-          rm -f $ZOPEN_PKGINSTALL/$pkg/.installed
+          rm -f $ZOPEN_PKGINSTALL/$pkg/.active
         fi
       fi
       [ $silent ] && printInfo "- Breaking link from current to versioned"

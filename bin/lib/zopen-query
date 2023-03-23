@@ -21,6 +21,7 @@ printSyntax()
   echo "  -v: run in verbose mode." >&2
   echo "  -d | --details: include full details for listings." >&2
   echo "  --no-header: suppress the header for the output." >&2
+  echo "  --no-version:  suppress version information, return package names." >&2
   echo "  --filter <color>: apply filter based on quality (green - all tests passing, blue - most tests passing, yellow - some tests passing, red - no tests passing, or skipped (no filter by default))"  >&2
   echo " and <package> is an optional list of one or more packages." >&2
 }
@@ -68,7 +69,11 @@ printDetailListEntries()
         else
           dotversion="N/a"
         fi
-        printf "%-15s %-15s %-15s %-15s\n" "$repo" "$originalTag" "dotversion" "$latestTag"
+        if ! $noversions; then
+          printf "%-15s %-15s %-15s %-15s\n" "$repo" "$originalTag" "$dotversion" "$latestTag"
+        else
+          printf "%s\n" "$repo"
+        fi
       fi 
     done
   else
@@ -132,7 +137,7 @@ printInstalledEntries(){
   if [ ! -z "$1" ] && ! $noheader; then
     printf "${NC}${UNDERLINE}%-15s %-20s %-15s %-15s\n${NC}" "Repo" "Installed version" ".version" "Tag"
   fi
-  installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .installed)"
+  installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .active)"
   printVerbose "Packages: $installedPackages"
   echo "$installedPackages" | xargs | tr ' ' '\n' | sort | while read repo; do
     pkghome=$(dirname "${repo}")
@@ -151,7 +156,11 @@ printInstalledEntries(){
     else
       fileversion="$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
       reponame=${fileversion%-*}
-      printf '%-15s %-20s %-15s %-15s\n' "$reponame" "$originalTag" "$dotversion" "$fileversion"
+      if ! $noversions; then
+        printf '%-15s %-20s %-15s %-15s\n' "$reponame" "$originalTag" "$dotversion" "$fileversion"
+      else
+        printf "%s\n" "$reponame"
+      fi
     fi
   done
   exit 0
@@ -242,7 +251,10 @@ done
 
 whatProvides(){
   needle=$1
-  found=$(zosfind $ZOPEN_ROOTFS/usr -name "${needle}")
+  printVerbose "Finding matches outside the ZOPEN_PKGINSTALL ($ZOPEN_PKGINSTALL)"
+  found=$(zosfind $ZOPEN_ROOTFS/usr -name "${needle}" |awk -v ZPI=$ZOPEN_PKGINSTALL '
+    /ZPI.*/ {next} {print}
+  ')
   printVerbose "Found? '$found'"
   if [[ -z $found ]]; then
     printInfo "No package provides '${needle}'"
@@ -255,10 +267,10 @@ whatProvides(){
         printInfo "Package $(cd $repo && pwd -P | awk -F/ '{ print $(NF)}') provides '$repo'"
       else
         deref=$(ls -l $repo | awk '{ print $(NF) }')
-        printVerbose "$ZOPEN_ROOTFS/prod  -> $deref"
-        printVerbose "${deref#$ZOPEN_ROOTFS/prod}"
-        pkg=$(echo "${deref#$ZOPEN_ROOTFS/prod}" | awk -F/ '{print $2}')
-        printInfo "Package $pkg provides '$repo'"
+        printVerbose "$ZOPEN_PKGINSTALL  -> $deref"
+        printVerbose "${deref#$ZOPEN_PKGINSTALL}"
+        pkg=$(echo "${deref#$ZOPEN_PKGINSTALL}" | awk -F/ '{print $2}')
+        printInfo "Package $pkg potentially provides '$repo'"
       fi
     done
   fi
@@ -269,6 +281,7 @@ whatProvides(){
 args=$*
 verbose=false
 noheader=false
+noversions=false
 localoption=true
 details=0
 needle=
@@ -304,6 +317,10 @@ while [[ $# -gt 0 ]]; do
     ;;
     "--no-header")
       noheader=true;
+    ;;
+    "--no-versions")
+      noversions=true;
+      noheader=true; # headers do not mean anything without versions!
     ;;
     "-f" | "--filter")
       filter=$2;

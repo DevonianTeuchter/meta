@@ -253,8 +253,8 @@ installPort()
   # Add tag information as a .releaseinfo file
   echo "$latestTag" > "${name}/.releaseinfo"
 
-  # Delete the .installed file if it was previously there
-  rm -f "${name}/.installed"
+  # Delete the .active file if it was previously there
+  rm -f "${name}/.active"
   rm -f "${name}/.replacedpath"
 
   printVerbose "Installing ${name}..."
