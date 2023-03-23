@@ -134,14 +134,18 @@ zopenInitialize()
 
 printVerbose()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   if ${verbose}; then
     printColors "${NC}${GREEN}${BOLD}VERBOSE${NC}: '${1}'" >&2
   fi
+  [ ! -z "$xtrc" ] && set -x
 }
 
 printHeader()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${YELLOW}${BOLD}${UNDERLINE}${1}${NC}" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 runAndLog()
@@ -185,23 +189,31 @@ runInBackgroundWithTimeoutAndLog()
 
 printSoftError()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${RED}${BOLD}***ERROR: ${NC}${RED}${1}${NC}" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 printError()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printSoftError "${1}"
+  [ ! -z "$xtrc" ] && set -x
   exit 4
 }
 
 printWarning()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${YELLOW}${BOLD}***WARNING: ${NC}${YELLOW}${1}${NC}" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 printInfo()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "$1" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 # Used to input sensitive data - turns off echo to the screen for the input
@@ -339,15 +351,16 @@ LOG_I="INFO"     # General information
 LOG_A="AUDIT"    # Security-type log for admin activities
 
 # Logging Categories - more than one possible for a log entry
-CAT_FILE="F"  # File handling (eg. downloading)
+CAT_CONFIG="C"    # Configuration change
+CAT_FILE="F"      # File handling (eg. downloading)
 CAT_INSTALL="I"   # Install processing
 CAT_NETWORK="N"   # Network processing
 CAT_PKG="P"       # Package handling
 CAT_QUERY="Q"     # Query processing
 CAT_REMOVE="R"    # Removal handling  
-CAT_SYS="S"    # Related to the underlying native z/OS system
+CAT_SYS="S"       # Related to the underlying native z/OS system
+CAT_ZOPEN="Z"     # Related to the zopen system itself 
 
-# fd,type,cats,odule,location,msg
 syslog() {
   fd=$1
   type=$2
