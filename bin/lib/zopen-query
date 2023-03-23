@@ -252,25 +252,22 @@ done
 whatProvides(){
   needle=$1
   printVerbose "Finding matches outside the ZOPEN_PKGINSTALL ($ZOPEN_PKGINSTALL)"
-  found=$(zosfind $ZOPEN_ROOTFS/usr -name "${needle}" |awk -v ZPI=$ZOPEN_PKGINSTALL '
-    /ZPI.*/ {next} {print}
-  ')
+  # Find any symlinks that match the name and can then be dereferenced
+  found=$(zosfind $ZOPEN_ROOTFS/usr -type l | grep "${needle}")
   printVerbose "Found? '$found'"
   if [[ -z $found ]]; then
     printInfo "No package provides '${needle}'"
   else
     matches=$(echo "$found"| wc -w | tr -d ' ' ) 
     printInfo "Found ${matches} match$([ $matches = 1 ] && echo "" || echo "es") on the system"
-    echo "$found" | xargs | tr ' ' '\n' | while read repo; do
-      printVerbose "Parsing $repo"
-      if [ -d $repo ]; then
-        printInfo "Package $(cd $repo && pwd -P | awk -F/ '{ print $(NF)}') provides '$repo'"
-      else
-        deref=$(ls -l $repo | awk '{ print $(NF) }')
+    echo "$found" | xargs | tr ' ' '\n' | while read foundmatch; do
+      printVerbose "Parsing $foundmatch"
+      if [ ! -d $foundmatch ]; then
+        deref=$(ls -l $foundmatch | awk '{ print $(NF) }')
         printVerbose "$ZOPEN_PKGINSTALL  -> $deref"
         printVerbose "${deref#$ZOPEN_PKGINSTALL}"
         pkg=$(echo "${deref#$ZOPEN_PKGINSTALL}" | awk -F/ '{print $2}')
-        printInfo "Package $pkg potentially provides '$repo'"
+        printInfo "$pkg provides '$foundmatch'"
       fi
     done
   fi
@@ -336,6 +333,10 @@ while [[ $# -gt 0 ]]; do
     "-v" | "--v" | "-verbose" | "--verbose")
       verbose=true
       ;;
+    -*)
+      printError "Unknown option '$1'"
+      ;;
+     
     *)
       chosenRepos="$chosenRepos $1";
       ;;
