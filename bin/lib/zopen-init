@@ -118,6 +118,14 @@ echo "export ZOPEN_ROOTFS" >> "$HOME/.zopen-config"
 
 # Add the profiled processing first so the zopen paths are added first
 cat << EOF >>  "$HOME/.zopen-config"
+atExit() {
+  sig=$?
+  [ -p $TMP_FIFO_PIPE ] && rm -rf $TMP_FIFO_PIPE
+  trap - EXIT # clear the EXIT trap so that it's not double called
+  exit $sig
+}
+
+trap "atExit" EXIT INT TERM QUIT HUP
 sanitizeEnvVar(){
   #remove any envvar entries that match the specified regex
   value=\$1
@@ -148,12 +156,16 @@ MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitiz
 MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
 
 if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
-    dotenvs=\$(find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print)
-    dotenvcnt=\$(echo "$dotenvs" | wc -l | tr -d ' ')
-    echo "- Processing zopen dotenv configs..."
-    flecnt=0
-    /bin/echo "- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
-    echo "\$dotenvs" | while read FILE; do
+  dotenvs=\$(find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print)
+  dotenvcnt=\$(echo "$dotenvs" | wc -l | tr -d ' ')
+  echo "- Processing zopen dotenv configs..."
+  flecnt=0
+  /bin/echo "- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
+  TMP_FIFO_PIPE="\$HOME/.zopen-config.pipe"
+  [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
+  mkfifo \$TMP_FIFO_PIPE
+  echo "\$dotenvs" | xargs | tr ' ' '\n'>>\$TMP_FIFO_PIPE &
+  while read FILE; do
       flecnt=\$(expr \$flecnt + 1)
       pct=\$(expr \$flecnt \* 100)
       pct=\$(expr \$pct / \$dotenvcnt)
@@ -165,7 +177,8 @@ if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
     LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
     MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
     MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
-  done
+  done < \$TMP_FIFO_PIPE
+  [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
   /bin/echo "\047[1A\047[\$30D\047[2K- Processed 100% (\${dotenvcnt}/\${dotenvcnt})"
   unset dotenvs dotenvcnt flecnt
 fi
@@ -201,7 +214,9 @@ profileEnable=$(getInput)
 if [ -z profileEnable ] & [ "xyx" = "x${profileEnable}x" ]; then
   if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
     printVerbose "Line not present (grep returned non-0)"
-    echo ". \$HOME/.zopen-config" >> $HOME/.profile
+cat << EOF >>  "$HOME/.zopen-config"
+[[ -e "\$HOME/.zopen-config" ]] && . \$HOME/.profile
+EOF
   fi
 fi
 printInfo "${NC}${YELLOW}- Run '. \$HOME/.zopen-config' to enable zopen environment for current session${NC}"
