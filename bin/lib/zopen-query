@@ -57,7 +57,6 @@ printDetailListEntries()
         if ! contents="$(getContentsFromGithub "https://api.github.com/repos/ZOSOpenTools/${repo}/releases/latest")"; then
           exit 4;
         fi
-        #FIXME: use jq to parse
         latestTag="$(echo "$contents" | grep "\"tag_name\":" | cut -d '"' -f 4)"
         if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
           originalTag=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
@@ -135,7 +134,7 @@ printDetailListEntries()
 }
 printInstalledEntries(){
   if [ ! -z "$1" ] && ! $noheader; then
-    printf "${NC}${UNDERLINE}%-15s %-20s %-15s %-15s\n${NC}" "Repo" "Installed version" ".version" "Tag"
+    printf "${NC}${UNDERLINE}%-15s %-30s %-30s\n${NC}" "Repo" "Installed version" "File version"
   fi
   installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .active)"
   printVerbose "Packages: $installedPackages"
@@ -157,7 +156,7 @@ printInstalledEntries(){
       fileversion="$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
       reponame=${fileversion%-*}
       if ! $noversions; then
-        printf '%-15s %-20s %-15s %-15s\n' "$reponame" "$originalTag" "$dotversion" "$fileversion"
+        printf '%-15s %-30s %-30s %-15s\n' "$reponame" "$dotversion" "$fileversion"
       else
         printf "%s\n" "$reponame"
       fi

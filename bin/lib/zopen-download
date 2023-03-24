@@ -92,7 +92,7 @@ installDependencies()
   name=$1
   dependencies=$2
   printVerbose "List of dependencies to install: $dependencies"
-  local skipupgrade_lcl=$skipupgrade
+  skipupgrade_lcl=$skipupgrade
   skipupgrade=true
   echo "$dependencies" | xargs | tr ' ' '\n' | sort | while read dep; do
     handlePackageInstall $dep 
@@ -109,7 +109,7 @@ handlePackageInstall(){
   versioned="$(echo $fullname | cut -s -d '=' -f 2)"
   tagged="$(echo $fullname | cut -s -d '%' -f 2)"
   printVerbose "Name:$name;version:$versioned;tag:$tagged;repo:$repo"
-  printHeader "Processing package: $name"
+  printHeader "Installing package: $name"
 
   releaseURL="https://api.github.com/repos/ZOSOpenTools/${repo}/releases"
   printVerbose "Grabbing list of all releases from $releaseURL"
@@ -166,7 +166,6 @@ handlePackageInstall(){
     TMP_FIFO_PIPE="$HOME/altselect.pipe"
     [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
     mkfifo $TMP_FIFO_PIPE
-    #"browser_download_url":"https://github.com/ZOSOpenTools/bisonport/releases/download/bisonport_19/bison-3.8.20220607_210636.zos.pax.Z"
     latestfiledetails="$(echo "$contents" | awk -F'/' -v PORT=$name -v REQVER=$versioned '
       BEGIN{regex = "browser_download_url.*"PORT"-"REQVER".*\.pax\.Z"} {if ( $0 ~ regex ){ sub(/\"browser_download_url\":/, ""); print}}
     ' | sort -u | tr -d " ")"
