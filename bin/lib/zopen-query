@@ -259,7 +259,7 @@ whatProvides(){
     printInfo "No package provides '${needle}'"
   else
     matches=$(echo "$found"| wc -w | tr -d ' ' ) 
-    printInfo "Found ${matches} match$([ $matches = 1 ] && echo "" || echo "es") on the system"
+    printInfo "Found ${matches} match$([ $matches = 1 ] && echo "" || echo "es") for regex '${needle}' on the system"
     echo "$found" | xargs | tr ' ' '\n' | while read foundmatch; do
       printVerbose "Parsing $foundmatch"
       if [ ! -d $foundmatch ]; then
