@@ -4,16 +4,22 @@
 #
 printSyntax()
 {
-  echo "" >&2
-  echo "Syntax: zopen <command>" >&2
-  echo "where <command> may be one of the following:" >&2
-  echo " init: generate a $HOME/.zopen-config file." >&2
-  echo " build: invokes the build script." >&2
-  echo " download: downloads z/OS Open Tools (deprecated)" >&2
-  echo " install: downloads and installs z/OS Open Tools" >&2
-  echo " generate: generate a zopen project" >&2
-  echo " update-cacert: update the cacert.pem file" >&2
-  echo " upgrade: upgrades already installed tools" >&2
+  printInfo "" >&2
+  printInfo "Syntax: ${NC}${BOLD}zopen <command>${NC}" >&2
+  printInfo "where ${NC}${BOLD}<command>${NC} may be one of the following:" >&2
+  printInfo "  ${NC}${BOLD}init         ${NC}   generate \$HOME/.zopen-config, creates file structure and bootstraps" >&2
+  printInfo "  ${NC}${BOLD}build        ${NC}   invokes the build script." >&2
+  printInfo "  ${NC}${BOLD}download     ${NC}   downloads z/OS Open Tool package(s)" >&2
+  printInfo "  ${NC}${BOLD}install      ${NC}   installs z/OS Open Tool package(s))" >&2
+  printInfo "  ${NC}${BOLD}generate     ${NC}   generate a zopen project" >&2
+  printInfo "  ${NC}${BOLD}update-cacert${NC}   update the cacert.pem file" >&2
+  printInfo "  ${NC}${BOLD}upgrade      ${NC}   upgrades already installed tools" >&2
+  printInfo "  ${NC}${BOLD}list         ${NC}   lists information about zOpen Tool packages" >&2
+  printInfo "  ${NC}${BOLD}query        ${NC}   queries zOpen Tool packages (see " >&2
+  printInfo "  ${NC}${BOLD}search       ${NC}   searches remote repo for zOpen Tool package" >&2
+  printInfo "  ${NC}${BOLD}remove       ${NC}   removes installed zOpen Tool packages" >&2
+  printInfo "  ${NC}${BOLD}alt          ${NC}   switch local versions of zOpen Tool packages" >&2
+  printInfo "  ${NC}${BOLD}clean        ${NC}   cleans various aspects of zOpen Tool packages" >&2
   echo "" >&2
 }
 
@@ -39,38 +45,61 @@ export bindir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
 args=$*
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    "alt")
+      shift
+      exec "${bindir}/lib/zopen-alt" $@
+      ;;
     "build")
       shift
       exec "${bindir}/lib/zopen-build" $@
       ;;
+    "clean")
+      shift
+      exec "${bindir}/lib/zopen-clean" $@
+      ;;
     "download")
       shift
-      printWarning "zopen download is deprecated and will be removed March 1, 2023. Please use zopen install instead."
-      exec "${bindir}/lib/zopen-install" $@
-      ;;
-    "install")
-      shift
-      exec "${bindir}/lib/zopen-install" $@
-      ;;
-    "upgrade")
-      shift
-      exec "${bindir}/lib/zopen-install" -u $@
+      exec "${bindir}/lib/zopen-download" $@
       ;;
     "generate")
       shift
       exec "${bindir}/lib/zopen-generate" $@
       ;;
-    "update-cacert")
-      shift
-      exec "${bindir}/lib/zopen-update-cacert" $@
+    "help" | "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printHelp "${args}"
+      exit 0
       ;;
     "init")
       shift
       exec "${bindir}/lib/zopen-init" $@
       ;;
-    "help" | "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
-      printHelp "${args}"
-      exit 0
+    "install" | "-i")
+      shift
+      exec "${bindir}/lib/zopen-download" $@
+      ;;
+    "list" | "-l")
+      shift
+      exec "${bindir}/lib/zopen-query" "--list" $@
+      ;;
+    "query" | "-q")
+      shift
+      exec "${bindir}/lib/zopen-query" $@
+      ;;
+    "remove" | "-r" | "uninstall" | "un" | "erase" | "e")
+      shift
+      exec "${bindir}/lib/zopen-remove" $@
+      ;;
+    "search" | "-s")
+      shift
+      exec "${bindir}/lib/zopen-query" --remote-search $@
+      ;;
+    "update-cacert")
+      shift
+      exec "${bindir}/lib/zopen-update-cacert" $@
+      ;;
+    "upgrade" | "up")
+      shift
+      exec "${bindir}/lib/zopen-download" -u $@
       ;;
     *)
       printSoftError "Unknown option ${1} specified"
