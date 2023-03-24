@@ -1,11 +1,23 @@
 #!/bin/sh
-defineColors() 
+defineANSI() 
 {
+  # Standard tty codes
+  ESC="\047"
+  ERASELINE="${ESC}[2K"
+  CRSRHIDE="${ESC}[?25l"
+  CRSRSHOW="${ESC}[?25h"
+
+  # Color-type codes, needs explicit terminal settings
   if [ ! "${_BPX_TERMPATH-x}" = "OMVS" ] && [ -z "${NO_COLOR}" ] && [ ! "${FORCE_COLOR-x}" = "0" ] && [ -t 1 ] && [ -t 2 ]; then
     esc="\047"
+    BLACK="${esc}[30m"
     RED="${esc}[31m"
     GREEN="${esc}[32m"
     YELLOW="${esc}[33m"
+    BLUE="${esc}[34m"
+    MAGENTA="${esc}[35m"
+    CYAN="${esc}[36m"
+    GRAY="${esc}[37m"
     BOLD="${esc}[1m"
     UNDERLINE="${esc}[4m"
     NC="${esc}[0m"
@@ -13,13 +25,74 @@ defineColors()
 # unset esc RED GREEN YELLOW BOLD UNDERLINE NC
 
     esc=''
+    BLACK=''
     RED=''
     GREEN=''
     YELLOW=''
+    BLUE=''
+    MAGENTA=''
+    CYAN=''
+    GRAY=''
     BOLD=''
     UNDERLINE=''
     NC=''
   fi
+}
+ansiupdate(){
+  deltax=$1
+  deltay=$2
+  echostr=$3
+  #crsrSetPos $x $y
+  if [ $deltax -gt 0 ]; then
+    crsrUp $deltax
+  elif [ $deltax -lt 0 ]; then
+    crsrDown $(expr $deltax \* -1)
+  fi
+  if [ $deltay -gt 0 ]; then
+    crsrRight $deltay
+  elif [ $deltay -lt 0 ]; then
+    crsrLeft $(expr $deltay \* -1)
+  fi
+ /bin/echo "${echostr}"
+}
+crsrGetPos(){
+# TODO
+    /bin/echo "\027[6n"            # ask the terminal for the position
+    read foo              # store the position in bash variable 'foo'
+    /bin/echo "Current position: >>${foo}<<"
+}
+crsrSetPos(){
+#TODO
+  x=$1
+  y=$2
+  /bin/echo "${ESC}[${y};${x}H"
+}
+
+crsrUp(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}A"
+}
+crsrDown(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}B"
+}
+crsrRight(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}C"
+}
+crsrLeft(){
+  chars=$1
+  /bin/echo "${ESC}[${chars}D"
+}
+
+zosfind(){
+  # Use the standard z/OS find utility; If the findutils package is installed,
+  # the installed find command takes precedence but is not compatible with the
+  # standard zos find [regex searches for "-name" are not allowed, but
+  # "-wholename" is not available on standard zosfind. For the tooling to be
+  # consistent across platofmrs (where findutils is/is not installed) use the
+  # standard zos version
+  /bin/find $*
 }
 
 defineEnvironment()
@@ -55,7 +128,7 @@ printColors()
 zopenInitialize()
 {
   defineEnvironment
-  defineColors
+  defineANSI
   processConfig
 }
 
@@ -131,9 +204,18 @@ printInfo()
   printColors "$1" >&2
 }
 
+# Used to input sensitive data - turns off echo to the screen for the input
+getInputHidden()
+{
+  stty -echo
+  read zopen_input
+  echo $zopen_input
+  stty echo
+}
+
 getInput()
 {
-  read zopen_input
+  read zopen_input < /dev/tty
   echo $zopen_input
 }
 
@@ -241,13 +323,11 @@ validateVersion()
   return 0
 }
 
-initDefaultEnvironment()
+deleteDuplicateEntries() 
 {
-  export PATH="$(getconf PATH)"
-  export _CEE_RUNOPTS="FILETAG(AUTOCVT,AUTOTAG) POSIX(ON)"
-  unset MANPATH
-  export LIBPATH="/usr/lib"
-  export STEPLIB=none
+  value=$1
+  delim=$2
+  echo "$value$delim" | awk -v RS="$delim" '!($0 in a) {a[$0]; printf("%s%s", col, $0); col=RS; }' | sed "s/${delim}$//"
 }
 
 zopenInitialize
