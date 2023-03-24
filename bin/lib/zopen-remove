@@ -1,0 +1,153 @@
+#!/bin/sh
+# Removal utility for z/OS Open Tools - https://github.com/ZOSOpenTools
+
+export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
+
+. "${utildir}/common.inc"
+
+printSyntax() 
+{
+  args=$*
+  echo "zopen remove is a utility to remove installed z/OS Open Tools packages."
+  echo "Syntax: zopen remove [<option>]* <package, ...>" >&2
+  echo "  where <option> may be one or more of:" >&2
+  echo "  -p|--purge: remove package, the versioned directory and any cached file"  >&2
+  echo "  -v: run in verbose mode" >&2
+  echo "  and <package> is a list of one or more projects to uninstall" >&2
+}
+
+unsymlinkFromSystem1(){
+  [ $silent ] && printInfo "- Locating dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
+  filestounlink=$(zosfind $ZOPEN_ROOTFS/usr/ -type l -exec test ! -e {} \; -print )
+  nfiles=$(echo "$filestounlink" | wc -l | tr -d ' ')
+  flecnt=0
+  pct=0
+  [ $silent ] && echo "- Processing ${pct}% (${flecnt}/${nfiles})"
+  echo "$filestounlink" | while read filetounlink; do
+    if [ ! $silent ]; then
+      flecnt=$(expr $flecnt + 1)
+      pct=$(expr $flecnt \* 100)
+      pct=$(expr $pct / $nfiles)
+      ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+    fi
+    rm -f $filetounlink
+  done
+  [[ $silent ]] && ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+}
+unsymlinkFromSystemVerbose(){
+  pkg=$1
+  if [ -e $ZOPEN_PKGINSTALL/$pkg/.links ]; then
+    [ $silent ] && printInfo "- Removing dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
+    nfiles=$(cat $ZOPEN_PKGINSTALL/$pkg/.links | wc -l  | tr -d ' ')
+    flecnt=0
+    pct=0
+    [ $silent ] && printInfo "- Processing ${pct}% (${flecnt}/${nfiles})"
+    cat "$ZOPEN_PKGINSTALL/$pkg/.links" | while read filetounlink; do
+      if ! $silent; then
+        flecnt=$(expr $flecnt + 1)
+        pct=`expr $flecnt \* 100`
+        pct=`expr $pct / $nfiles`
+        ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+      fi
+      if [ -e $filetounlink ] && [ ! -d $filetounlink ]; then
+        rm -f $filetounlink
+      fi
+    done
+  else
+    # Slower fallback for if package does not have .links meta
+    [ $silent ] && printInfo "- Locating dangling symlinks in $ZOPEN_ROOTFS/usr/ ..."
+    filestounlink=$(zosfind $ZOPEN_ROOTFS/usr/ -type l -exec test ! -e {} \; -print )
+    nfiles=$(echo "$filestounlink" | wc -l | tr -d ' ')
+    flecnt=0
+    pct=0
+    [ $silent ] && echo "- Processing ${pct}% (${flecnt}/${nfiles})"
+    echo "$filestounlink" | while read filetounlink; do
+      if ! $silent; then
+        flecnt=$(expr $flecnt + 1)
+        pct=`expr $flecnt \* 100`
+        pct=`expr $pct / $nfiles`
+        ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+      fi
+      if [ -e $filetounlink ]; then
+        rm -f $filetounlink
+      fi
+    done
+  fi
+  [[ $silent ]] || ansiupdate 3 -30 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+}
+removePackageDirectories(){
+  pkg=$1
+  [ $silent ] && printInfo "- Removing any directories associated with package"
+  zosfind $ZOPEN_ROOTFS/usr/ -type d -name $pkg -print | sort -r | while read rmdir; do
+    printVerbose "Removing orphaned directory: $rmdir"  
+    rm -rf $rmdir
+  done
+}
+removePackages(){
+  pkglist=$*
+  echo "$pkglist" | xargs | tr ' ' '\n' | sort | while read pkg; do
+    [ $silent ] && printHeader "Removing package: $pkg"
+    [ $silent ] && printInfo "- Checking status of package '$pkg'"
+    if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.active ]; then 
+      [ $silent ] && printInfo "${NC}${YELLOW}Package '$pkg' is not installed${NC}"
+    else
+      [ $silent ] && printInfo "- Package installed, unmeshing from system"
+      version="unknown"
+      if [ -e "${ZOPEN_PKGINSTALL}/${pkg}/.releaseinfo" ]; then
+        version=$(cat "${ZOPEN_PKGINSTALL}/${pkg}/.releaseinfo")
+      fi
+      unsymlinkFromSystemVerbose $pkg
+      if [ -e $ZOPEN_PKGINSTALL/$pkg ]; then
+        deref=$(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P | awk -F/ '{ print $(NF)}')
+        if $purge; then
+          [ $silent ] && printInfo "- Purging package"
+          rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
+          syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Prurging package:'${needle};version:$version;"
+        else
+          [ $silent ] && printInfo "- Removing metadata file to mark uninstall"
+          rm -f $ZOPEN_PKGINSTALL/$pkg/.active
+        fi
+      fi
+      [ $silent ] && printInfo "- Breaking link from current to versioned"
+      rm -f $ZOPEN_PKGINSTALL/$pkg/
+      [ $silent ] && printInfo "- Removing profiled entry"
+      [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
+
+      removePackageDirectories $pkg
+      syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Removed package:'${needle};version:$version;"
+      [ $silent ] && printInfo "${NC}${GREEN}Successfully removed: $pkg${NC}"
+    fi
+  done
+}
+
+# Main code start here
+args=$*
+
+verbose=false
+silent=false
+purge=false
+chosenRepos=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    "-p" | "--purge")
+      purge=true
+      ;;
+    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printSyntax "${args}"
+      exit 4
+      ;;
+    "-s" | "--silent")
+      silent=true
+      ;;
+    "-v" | "--v" | "-verbose" | "--verbose")
+      verbose=true
+      ;;
+    *)
+      chosenRepos="$chosenRepos $1";
+      ;;
+  esac
+  shift;
+done
+
+[[ ! -z "$chosenRepos" ]] || printError "No packages selected for removal" 
+removePackages "$chosenRepos"
