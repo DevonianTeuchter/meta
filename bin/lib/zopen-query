@@ -149,9 +149,7 @@ printInstalledEntries(){
         
     printVerbose "Original tag: $originalTag for repo: $repo"
     if [ -z "$1" ]; then
-#TODO pick an option      printInfo "$originalTag -> $( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
       printInfo "$originalTag"
-#or      printInfo "$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
     else
       fileversion="$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
       reponame=${fileversion%-*}
