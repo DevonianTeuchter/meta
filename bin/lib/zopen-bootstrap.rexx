@@ -5,6 +5,7 @@
 /*                      get a system that bootstraps into a full zopen   */
 /*                      environment.                                     */
 /* END OF SPECIFICATIONS  * * * * * * * * * * * * * * * * * * * * * * ****/
+parse arg url
 DEBUG = 0
 trace o
 
@@ -18,28 +19,18 @@ tlsCipherSuiteList = tlsCipherSuiteList || 'C028' || '009C' || '009D' || '003C'
 
 rootfs=environment('ZOPEN_ROOTFS')
 if "" = rootfs then
-  rootfs = environment('HOME')"/zopen.dt"
+  exit 12
 bootdir=rootfs"/boot"
-cmd = "mkdir -p "bootdir
-dbg("cmd:"cmd";bpxwunix:"bpxwunix(cmd, , out.,err.))
 cachedir=rootfs"/var/cache/zopen"
-cmd = "mkdir -p "cachedir
-dbg("cmd:"cmd";bpxwunix:"bpxwunix(cmd, , out.,err.))
-url = "https://github.com/ZOSOpenTools/curlport/releases/download/"
-url = url||"curlport_420/curl-7.83.1.20230120_231325.zos.pax.Z"
 paxname=SUBSTR(url, 1+LASTPOS('/', url))
 
 if stream(cachedir||'/'||paxname, "c", "QUERY EXISTS") /= '' then do
   dbg("Using cached version of package")
 end
 else do
-  tmpdir = bootdir
-  say "Making temp dir"
-  cmd = 'mkdir -p -m 777 '||tmpdir
-  cmd
-  keydbfile=tmpdir||"/hwt.kdb"
-  keydbrdb=tmpdir||"/hwt.rdb"
-  keydbstash=tmpdir||"/hwt.sth"
+  keydbfile=bootdir||"/hwt.kdb"
+  keydbrdb=bootdir||"/hwt.rdb"
+  keydbstash=bootdir||"/hwt.sth"
   cmd = "rm "keydbfile" "keydbrdb" "keydbstash
   dbg("cmd:"cmd";bpxwunix:"bpxwunix(cmd, , out.,err.))
   say "Generating HWT kdb..."
@@ -66,7 +57,7 @@ else do
   do i = 1 to out.0
     dbg( "bpxwunix:`  "out.i)
   end
-  certfile=tmpdir||"/cert.pem"
+  certfile=bootdir||"/cert.pem"
   parse source os calltype thisfile therest
   certcount = 0
   wtf = 0
@@ -241,13 +232,7 @@ else do
   trace(tracestate)
   call stream filehandle,c,"close"
 end
-say "Expanding curl..."
-cmd = "pax -r"
-if DEBUG = 1 then
-  cmd = cmd||"v"
-cmd = cmd||"f "cachedir||"/"||paxname||" -s##"||bootdir||"/#"
-cmd
-exit
+exit 0
 
 dbg:
 parse arg outparams

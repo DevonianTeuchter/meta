@@ -159,9 +159,7 @@ MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
 if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
   dotenvs=\$(find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print)
   dotenvcnt=\$(echo "\$dotenvs" | wc -l | tr -d ' ')
-  echo "- Processing zopen dotenv configs..."
   flecnt=0
-  /bin/echo "- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
   [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
   mkfifo \$TMP_FIFO_PIPE
   echo "\$dotenvs" | xargs | tr ' ' '\n'>>\$TMP_FIFO_PIPE &
@@ -169,7 +167,7 @@ if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
       flecnt=\$(expr \$flecnt + 1)
       pct=\$(expr \$flecnt \* 100)
       pct=\$(expr \$pct / \$dotenvcnt)
-    /bin/echo "\047[1A\047[$30D\047[2K- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
+    /bin/echo "\047[1A\047[$30D\047[2K- Processing zopen config: \${pct}% (\${flecnt}/\${dotenvcnt})"
     . \$FILE
     PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
     PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
@@ -179,23 +177,35 @@ if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
     MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
   done < \$TMP_FIFO_PIPE
   [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
-  /bin/echo "\047[1A\047[\$30D\047[2K- Processed 100% (\${dotenvcnt}/\${dotenvcnt})"
+  /bin/echo "\047[1A\047[\$30D\047[2K- Processed zopen config: 100% (\${dotenvcnt}/\${dotenvcnt})"
   unset dotenvs dotenvcnt flecnt
 fi
+MANPATH="\$MANPATH:"
 export MANPATH
 export LIBPATH
 export PATH
 EOF
 
+printVerbose "Setting configuration file as read-only to user, no access to others"
+chmod 400 $HOME/.zopen-config
 printInfo "- Created config in $HOME/.zopen-config."
-printInfo "- Root FS available at $ZOPEN_ROOTFS"
+
+printInfo "- Root FS available at $rootfs"
+export ZOPEN_ROOTFS=$rootfs
 printInfo "- Running bootstrap"
-bootstrap=$("${utildir}/zopen-bootstrap.rexx")
+curlpax="curl-7.83.1.20230120_231325.zos.pax.Z"
+curlurl="https://github.com/ZOSOpenTools/curlport/releases/download/curlport_420/$curlpax"
+bootstrap=$($utildir/zopen-bootstrap.rexx $curlurl)
 printInfo "- Bootstrapped curl downloaded. Configuring for use..."
+printVerbose "- Expanding curl..."
+cachedir="$rootfs/var/cache/zopen"
+[[ -e $cachedir/$curlpax ]] || printError "Could not locate downloaded curl pax."
+paxrc=$(pax -rf $cachedir/$curlpax -s##$rootfs/boot/#)
+
 # Need to source the .env file from within the actual curl directory and cannot
 # spawn sub-process otherwise no access to environment from this script so run inline
 curlfile="$(ls $rootfs/boot |grep curl)"
-[[ -e $curlfile ]] || printError "Could not locate curl for bootstrap. Re-run 'zopen init' to retry"
+[[ -e $rootfs/boot/$curlfile ]] || printError "Could not locate curl for bootstrap. Re-run 'zopen init' to retry"
 chmod -R 755 $rootfs/boot/$curlfile
 curwd=$PWD
 cd $rootfs/boot/$curlfile/
@@ -203,13 +213,20 @@ cd $rootfs/boot/$curlfile/
 cd $curwd
 
 printInfo "- Updating CA cert [to resolve previous SSL_CERT_FILE warnings]"
+ZOPEN_CA="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
+mkdir -p $ZOPEN_CA
+ZOPEN_CA="$ZOPEN_CA/cacert.pem"
+export ZOPEN_CA
 runAndLog "${utildir}/zopen-update-cacert -i -f"
+printInfo "- Sourcing environment"
+. $HOME/.zopen-config
+printInfo "- Using bootstrapped curl to install latest release of itself (if available)"
 runAndLog "${utildir}/zopen-download curl"
-printInfo "Merging latest meta package into zopen system"
+printInfo "- Installing latest version of meta package into zopen system"
 runAndLog "${utildir}/zopen-download meta"
-printInfo "- Configuration complete."
-printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
+printInfo "- zopen bootstrapping complete"
 
+printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
 profileEnable=$(getInput)
 if [ -z profileEnable ] & [ "xyx" = "x${profileEnable}x" ]; then
   if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
