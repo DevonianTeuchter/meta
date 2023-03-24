@@ -1,7 +1,28 @@
-# meta
-Meta repository to tie together the various underlying z/OS Open Source tools repositories here.
+# meta-redux
+A reworking of the main meta project to add additional package management facilities, similar to utilities like apt, dpkg, yum, yast2, emerge .... just written in pure shell script to remove any pre-reqs.
 
-View our documentation at https://zosopentools.github.io/meta/.
+## Installation
+Clone the repo or download/expand the pax.  From the bin directory run the following command and answering the questions:
+'''
+zopen init
+'''
+
+## Important usage notes
+On first run, _zopen init_ will actually install the original version of the meta package, which removes the capability provided by this fork [merging to upstream later hopefully !).  This is to keep the functionality as close to what a "standard" run should look like.  It does require a workaround to ensure that the updated capability can be used:
+'''
+cd $ZOPEN_ROOTFS/<usr/lpp|opt|prod|usr/zopen>  # depending on installation selection
+ln -s <location where this project was cloned or pax expanded> meta-dt
+cd meta-dt/bin
+zopen alt meta -s
+<select option for meta-dt - probably 2!>
+'''
+
+## Restrictions
+At this time, the zopen build capability does not work with the fork due to the way package dependencies and post-built installation occurs.  This is on the roadmap...
+
+
+
+View the main Meta documentation at https://zosopentools.github.io/meta/.
 
 ## Background
 
