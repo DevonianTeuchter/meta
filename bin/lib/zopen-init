@@ -118,10 +118,11 @@ echo "export ZOPEN_ROOTFS" >> "$HOME/.zopen-config"
 
 # Add the profiled processing first so the zopen paths are added first
 cat << EOF >>  "$HOME/.zopen-config"
+TMP_FIFO_PIPE="\$HOME/.zopen-config.pipe"
 atExit() {
   sig=$?
   [ -p $TMP_FIFO_PIPE ] && rm -rf $TMP_FIFO_PIPE
-  trap - EXIT # clear the EXIT trap so that it's not double called
+  trap - EXIT INT TERM QUIT HUP
   exit $sig
 }
 
@@ -157,11 +158,10 @@ MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
 
 if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
   dotenvs=\$(find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print)
-  dotenvcnt=\$(echo "$dotenvs" | wc -l | tr -d ' ')
+  dotenvcnt=\$(echo "\$dotenvs" | wc -l | tr -d ' ')
   echo "- Processing zopen dotenv configs..."
   flecnt=0
   /bin/echo "- Processing \${pct}% (\${flecnt}/\${dotenvcnt})"
-  TMP_FIFO_PIPE="\$HOME/.zopen-config.pipe"
   [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
   mkfifo \$TMP_FIFO_PIPE
   echo "\$dotenvs" | xargs | tr ' ' '\n'>>\$TMP_FIFO_PIPE &
@@ -187,8 +187,7 @@ export LIBPATH
 export PATH
 EOF
 
-printInfo "- Created config in $HOME/.zopen-config. Updating environment"
-. "$HOME/.zopen-config"
+printInfo "- Created config in $HOME/.zopen-config."
 printInfo "- Root FS available at $ZOPEN_ROOTFS"
 printInfo "- Running bootstrap"
 bootstrap=$("${utildir}/zopen-bootstrap.rexx")
@@ -196,6 +195,7 @@ printInfo "- Bootstrapped curl downloaded. Configuring for use..."
 # Need to source the .env file from within the actual curl directory and cannot
 # spawn sub-process otherwise no access to environment from this script so run inline
 curlfile="$(ls $rootfs/boot |grep curl)"
+[[ -e $curlfile ]] || printError "Could not locate curl for bootstrap. Re-run 'zopen init' to retry"
 chmod -R 755 $rootfs/boot/$curlfile
 curwd=$PWD
 cd $rootfs/boot/$curlfile/
@@ -214,13 +214,12 @@ profileEnable=$(getInput)
 if [ -z profileEnable ] & [ "xyx" = "x${profileEnable}x" ]; then
   if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
     printVerbose "Line not present (grep returned non-0)"
-cat << EOF >>  "$HOME/.zopen-config"
-[[ -e "\$HOME/.zopen-config" ]] && . \$HOME/.profile
+cat << EOF >>  "$HOME/.profile"
+[[ -e "\$HOME/.zopen-config" ]] && . \$HOME/.zopen-config
 EOF
   fi
 fi
 printInfo "${NC}${YELLOW}- Run '. \$HOME/.zopen-config' to enable zopen environment for current session${NC}"
 syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_FILE" "INIT" "" "zopen environment initialised as $ZOPEN_ROOTFS"
 printInfo "${NC}${GREEN}zopen initialization complete.${NC}"
-
 
