@@ -134,14 +134,18 @@ zopenInitialize()
 
 printVerbose()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   if ${verbose}; then
     printColors "${NC}${GREEN}${BOLD}VERBOSE${NC}: '${1}'" >&2
   fi
+  [ ! -z "$xtrc" ] && set -x
 }
 
 printHeader()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${YELLOW}${BOLD}${UNDERLINE}${1}${NC}" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 runAndLog()
@@ -185,23 +189,31 @@ runInBackgroundWithTimeoutAndLog()
 
 printSoftError()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${RED}${BOLD}***ERROR: ${NC}${RED}${1}${NC}" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 printError()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printSoftError "${1}"
+  [ ! -z "$xtrc" ] && set -x
   exit 4
 }
 
 printWarning()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${YELLOW}${BOLD}***WARNING: ${NC}${YELLOW}${1}${NC}" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 printInfo()
 {
+  [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "$1" >&2
+  [ ! -z "$xtrc" ] && set -x
 }
 
 # Used to input sensitive data - turns off echo to the screen for the input
