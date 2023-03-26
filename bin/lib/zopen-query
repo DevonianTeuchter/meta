@@ -140,7 +140,11 @@ printInstalledEntries(){
   printVerbose "Packages: $installedPackages"
   echo "$installedPackages" | xargs | tr ' ' '\n' | sort | while read repo; do
     pkghome=$(dirname "${repo}")
-    originalTag=$(cat "${pkghome}/.releaseinfo")
+    if [ -e "${pkghome}/.releaseinfo" ]; then
+      originalTag=$(cat "${pkghome}/.releaseinfo")
+    else
+      originalTag="N/a"
+    fi
     if [ -e "${pkghome}/.version" ]; then
       dotversion=$(cat "${pkghome}/.version")
     else
