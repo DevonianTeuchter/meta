@@ -222,8 +222,21 @@ printInfo "- Sourcing environment"
 . $HOME/.zopen-config
 printInfo "- Using bootstrapped curl to install latest release of itself (if available)"
 runAndLog "${utildir}/zopen-download curl"
-printInfo "- Installing latest version of meta package into zopen system"
-runAndLog "${utildir}/zopen-download meta"
+
+# Code to use this version of meta as "official" install - pin to ensure no overwriting
+printInfo "- Installing and pinning current (this forked) version of meta" 
+printInfo "Current dir: $utildir"
+metadtInstDir="$ZOPEN_ROOTFS/$zopen_pkginstall/meta-dt"
+mkdir -p $metadtInstDir
+cp -RT ../  $metadtInstDir
+printInfo "- Running alternative utility to allow selection of forked meta"
+runAndLog "${utildir}/zopen-alt meta -s"
+
+
+#TODO: Reinstate following code should this fork merge
+#printInfo "- Installing latest version of meta package into zopen system"
+#runAndLog "${utildir}/zopen-download meta"
+
 printInfo "- zopen bootstrapping complete"
 
 printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
