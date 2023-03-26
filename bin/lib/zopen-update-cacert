@@ -61,8 +61,8 @@ getCACertFromCurl()
   fi
   curlver="$(whence curl)"
   printVerbose "Using curl located at: $curlver"
-  if ! curl -L $nocertverify -o "$TEMP_CACERT" " ${cacert_update_url}"; then
-    printError "curl command could not download $url"
+  if ! $curlver -L $nocertverify -o "$TEMP_CACERT" ${cacert_update_url} ; then
+    printError "curl command could not download from: ${cacert_update_url}"
   fi
 
   if [ ! -f $TEMP_CACERT ]; then
