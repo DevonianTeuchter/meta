@@ -366,9 +366,20 @@ EOF
         printInfo "- Skipping dependency installation"
     elif $reinstall; then
       printVerbose "- Reinstalling so no dependency reinstall (unless explicitly listed)"
-    elif echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
-      dependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
-      if [ ! "$dependencies" = "No dependencies" ]; then
+    else
+      printVerbose "Checking for .runtimedeps file"
+      if [ -e ${baseinstalldir}/${name}/.runtimedeps ]; then
+        dependencies=$(cat ${baseinstalldir}/${name}/.runtimedeps)
+      fi
+      printVerbose "Checking for runtime dependencies from the git metadata"
+      if echo "$statusline" | grep "Runtime Dependencies:" >/dev/null; then
+        gitmetadependencies="$(echo "$statusline" | sed -e "s#.*Runtime Dependencies:<\/b> ##" -e "s#<br />.*##")"
+        if [ ! "$gitmetadependencies" = "No dependencies" ]; then
+          dependencies="$dependencies $gitmetadependencies"
+        fi
+      fi
+      dependencies=$(deleteDuplicateEntries "$dependencies" " ")
+      if [ ! "x" = "x$dependencies" ]; then
         printInfo "- $name depends on: $dependencies"
         installDependencies "$name" "$dependencies"
       fi
