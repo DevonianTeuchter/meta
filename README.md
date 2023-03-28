@@ -1,24 +1,33 @@
 # meta-redux
-A reworking of the main meta project to add additional package management facilities, similar to utilities like apt, dpkg, yum, yast2, emerge .... just written in pure shell script to remove any pre-reqs.
+A reworking of the main meta project to add additional package management facilities, similar to utilities like apt, dpkg, yum, yast2, emerge .... just written in pure shell script (and a tiny bit of REXX) to remove any pre-reqs (like python/perl/bash etc).
+This fork is designed for everyday usage of the zos Open Tools ports within the USS environment or for those who wish to download the tools; users who are interested in building and/or porting packages from scratch should use the main release of meta at this time.
 
 ## Installation
-Clone the repo or download/expand the pax.  From the bin directory run the following command and answering the questions:
+Clone the repo or download/expand a release pax.  From the bin directory run the following command, answering the questions appropriately:
 '''
 zopen init
 '''
 
-## Important usage notes
-On first run, _zopen init_ will actually install the original version of the meta package, which removes the capability provided by this fork [merging to upstream later hopefully !).  This is to keep the functionality as close to what a "standard" run should look like.  It does require a workaround to ensure that the updated capability can be used:
-'''
-cd $ZOPEN_ROOTFS/<usr/lpp|opt|prod|usr/zopen>  # depending on installation selection
-ln -s <location where this project was cloned or pax expanded> meta-dt
-cd meta-dt/bin
-zopen alt meta -s
-<select option for meta-dt - probably 2!>
-'''
 
 ## Restrictions
-At this time, the zopen build capability does not work with the fork due to the way package dependencies and post-built installation occurs.  This is on the roadmap...
+Currently, the zopen build capability DOES NOT work with the fork due to the way package dependencies and post-built installation occurs.  This is on the roadmap...
+
+
+
+# Sample usage
+./zopen init
+. $HOME/.zopen-config
+./zopen list --installed
+zopen install xz
+zopen list --installed
+zopen upgrade
+
+## Important usage notes
+On first run, _zopen init_ will copy this forked version of meta into the "package" area of zopen (ie. where packages are expanded and accessed from).  It will also be pinned to the release to prevent any possible updates from the "real" meta package. Removing the .pinned file from the meta-dt directory will allow for the main meta port to be installed however this will cause incompatabilities if run
+
+# Problem resolution
+If the meta package does get updated to a non-dt version, then running "./zopen alt meta -s" from the meta-dt/bin directory within the zopen filesystem should allow selection of the dt-forked meta; running any other non-forked zopen commands might break 
+
 
 
 
