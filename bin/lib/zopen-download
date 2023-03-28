@@ -32,7 +32,7 @@ getContentsFromGithub()
   url=$1
   printVerbose "Requesting from url: ${url} "
   if ! repo_results=$(curl $OAUTH_TOKEN_OPTION "$OAUTH_TOKEN" -s "$url"); then
-    printWarning "curl command could not download $url"
+    printError "Unable to download from url: '$url'. Resolve reported issue and retry" 
   fi
   
   if echo $repo_results | grep -q "API rate limit exceeded for" 2>/dev/null; then
@@ -129,6 +129,9 @@ handlePackageInstall(){
   printVerbose "Checking for meta file at: ${ZOPEN_PKGINSTALL}/${name}/.releaseinfo"
   if [ -e "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo" ]; then
     originalFileVersion=$(cat "${ZOPEN_PKGINSTALL}/${name}/.releaseinfo")
+    printVerbose "Found originalFileVersion=$originalFileVersion (port is already installed)"
+  elif [ -e "${ZOPEN_PKGINSTALL}/${name}/.version" ]; then
+    originalFileVersion=$(cat "${ZOPEN_PKGINSTALL}/${name}/.version")
     printVerbose "Found originalFileVersion=$originalFileVersion (port is already installed)"
   else
     printVerbose "Could not detect existing installation at ${ZOPEN_PKGINSTALL}/${name}"
@@ -456,17 +459,15 @@ if [ -z "${chosenRepos}" ]; then
     printInfo "No ports selected for installation"
     exit 4
   fi
-  if ! $all && $upgradeInstalled; then
-    printVerbose "No specific port to upgrade, upgrade all"
-    all=true
-  fi
-fi
-
-if $all; then
-  printInfo "Enter 'all' to confirm full installation [takes a long time so be sure!]:"
-  confirmall=$(getInput)
-  if [ ! "xall" = "x${confirmall}" ]; then
-    printError "Cancelling full installation"
+  if $upgradeInstalled; then
+    printVerbose "No specific port to upgrade, upgrade all installed packages"
+    chosenRepos="$(${utildir}/zopen-query list --installed --no-header --no-versions)"
+  elif $all; then
+    printInfo "Enter 'all' to confirm full installation [takes a long time so be sure!]:"
+    confirmall=$(getInput)
+    if [ ! "xall" = "x${confirmall}" ]; then
+      printError "Cancelling full installation"
+    fi
   fi
 fi
 
