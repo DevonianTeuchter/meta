@@ -237,12 +237,6 @@ handlePackageInstall(){
   fi
 
   if ! $downloadOnly & ! $cacheOnly; then
-    if $unInstallOldVersion; then
-      printVerbose "Uninstalling any previous version - silently"
-      # This will remove any old symlinks or dirs that might have changed in an upgrade
-      # for example, even if it's a reinstall [updated file might still be different!]
-      remove=$(zopen remove ${name})
-    fi
     installdirname=${pax%.pax.Z} # Use full pax name as default
 
     printInfo "- Extracting $pax..."
@@ -271,6 +265,13 @@ handlePackageInstall(){
       rm -f "${pax}"
     fi
 
+    if $unInstallOldVersion; then
+      printVerbose "Uninstalling any previous version - silently"
+      # This will remove any old symlinks or dirs that might have changed in an upgrade
+      # for example, even if it's a reinstall [updated file might still be different!]
+      remove=$(zopen remove ${name})
+    fi
+    
     if $setactive; then
       if [ -L $baseinstalldir/$name ]; then
         printVerbose "Removing old symlink '$baseinstalldir/$name'"
