@@ -150,4 +150,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ ! -z "$chosenRepos" ]] || printError "No packages selected for removal" 
+mutexReq "zopen" "zopen"
 removePackages "$chosenRepos"
+mutexFree "zopen"

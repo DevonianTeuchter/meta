@@ -125,6 +125,22 @@ printColors()
   /bin/echo "$1"
 }
 
+mutexReq(){
+  mutex=$1
+  lockdir="$ZOPEN_ROOTFS/var/lock"
+  [ -e lockdir ] || mkdir -p $lockdir
+  mutex="$lockdir/$mutex"
+  [ -e "$mutex" ] && echo "Aborting, Lock for $2 already taken" && exit -1
+  touch $mutex
+  trap "rm -rf $mutex" EXIT
+}
+mutexFree(){
+  mutex=$1
+  lockdir="$ZOPEN_ROOTFS/var/lock"
+  mutex="$lockdir/$mutex"
+  [ -e "$mutex" ] && rm -f $mutex
+}
+
 zopenInitialize()
 {
   defineEnvironment
@@ -252,7 +268,7 @@ printElapsedTime()
 
 processConfig()
 {
-  if [ -z $ZOPEN_ROOTFS ]; then
+  if [ -z "$ZOPEN_ROOTFS" ]; then
     if [ -f "$HOME/.zopen-config" ]; then
       . "$HOME/.zopen-config"
     fi

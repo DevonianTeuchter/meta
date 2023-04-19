@@ -393,7 +393,9 @@ installPorts()
   ports="$1"
   printVerbose "Ports to install: $ports"
   echo "$ports" | xargs | tr ' ' '\n' | while read port; do
+    mutexReq "zopen" "zopen"
     handlePackageInstall $port
+    mutexFree "zopen"
   done
 )
 

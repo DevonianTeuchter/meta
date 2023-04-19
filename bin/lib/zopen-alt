@@ -145,11 +145,13 @@ listAlts(){
       printInfo "$i: ${repo#$ZOPEN_PKGINSTALL/}"
     fi
   done < $TMP_FIFO_PIPE
-  [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
-  
+  [[ ! -p $TMP_FIFO_PIPE ]] || rm -rf $TMP_FIFO_PIPE
+
   if $sett; then
+    mutexReq "zopen" "zopen"
     setAlt $i $needle
     unset $sett
+    mutexFree "zopen"
     listAlts false $needle
   fi
   exit 0
