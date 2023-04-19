@@ -130,8 +130,9 @@ mutexReq(){
   lockdir="$ZOPEN_ROOTFS/var/lock"
   [ -e lockdir ] || mkdir -p $lockdir
   mutex="$lockdir/$mutex"
-  [ -e "$mutex" ] && echo "Aborting, Lock for $2 already taken" && exit -1
-  touch $mutex
+  mypid=$(exec sh -c 'echo $PPID')
+  [ -e "$mutex" ] && [ ! "$(cat my_file)" = "$mypid" ] && echo "Aborting, Lock for $2 already taken" && exit -1
+  echo "$mypid" > $mutex
   trap "rm -rf $mutex" EXIT
 }
 mutexFree(){
