@@ -461,12 +461,6 @@ else
   printWarning "Setting ZOPEN_GIT_OAUTH_TOKEN is recommended to ensure that you do not hit the GitHub API cap. See --help for more details."
 fi
 
-# Retrieve all repositories
-if ! repo_results="$(getContentsFromGithub "https://api.github.com/users/ZOSOpenTools/repos?per_page=250")"; then
-  exit 4;
-fi
-repo_results=$(echo "$repo_results" | grep "\"full_name\":" 2>/dev/null | cut -d '"' -f 4)
-
 if $downloadOnly | $localInstall; then
   downloadDir=$PWD
 else
@@ -489,7 +483,12 @@ fi
 
 printVerbose "Working directory: ${downloadDir}"
 
-# Parse repositories for zopen framework repos
+# Parse passed in repositories and check if valid zopen framework repos
+if ! repo_results="$(getContentsFromGithub "https://api.github.com/users/ZOSOpenTools/repos?per_page=250")"; then
+  exit 4;
+fi
+repo_results=$(echo "$repo_results" | grep "\"full_name\":" 2>/dev/null | cut -d '"' -f 4)
+
 foundPort=false
 installArray=""
 
