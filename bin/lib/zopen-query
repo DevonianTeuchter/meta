@@ -136,7 +136,7 @@ printInstalledEntries(){
   if [ ! -z "$1" ] && ! $noheader; then
     printf "${NC}${UNDERLINE}%-15s %-30s %-30s\n${NC}" "Repo" "Installed version" "File version"
   fi
-  installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .active)"
+  installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .active -follow | grep -v "[^-]*-.*" )"
   printVerbose "Packages: $installedPackages"
   echo "$installedPackages" | xargs | tr ' ' '\n' | sort | while read repo; do
     pkghome=$(dirname "${repo}")
