@@ -16,48 +16,6 @@ printSyntax()
   echo " and <package> is a package name." >&2
 }
 
-symlinkIntoSystem(){
-  name=$1
-  installdir=$ZOPEN_PKGINSTALL
-  nosymlink=false 
-# The above vars are used to keep the code below in sync with zopen-download  
-  if ! $nosymlink; then
-    printInfo "Integrating package into file system"
-    basedir=$installdir/$name/
-    target=$ZOPEN_ROOTFS/usr
-    dirs=$(zosfind $basedir -type d | grep -v ".git" | sort -r)
-    ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
-    dircnt=0
-    echo "  ${dircnt}/${ndirs}   0%"
-    echo "$dirs" | while read dir; do
-      dircnt=$(expr $dircnt + 1)
-      trimdir=$(echo $dir | sed "s#^$basedir##")
-      if [[ ! "x$trimdir" = "x" ]]; then 
-        mkdir -p $target/$trimdir
-        filestolink=$(zosfind $dir -type f)
-        nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
-        if [ ! $nfiles -eq 0 ]; then
-          flecnt=0
-          pct=0
-          ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-          echo "$filestolink" | while read filetolink; do
-            flecnt=$(expr $flecnt + 1)
-            pct=`expr $flecnt \* 100`
-            pct=`expr $pct / $nfiles`
-            ansiupdate 3 -30 "${ERASELINE}Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-            trimfile=$(echo $filetolink | sed "s#^$basedir##")
-            if [ ! -z "$trimfile" ]; then
-              ln -fs $filetolink $target/$trimfile
-            fi
-          done
-        fi
-      fi
-    done
-    ansiupdate 3 -30 "${ERASELINE}Processed ${ndirs} of ${ndirs}"
-    printInfo "Integration complete"
-  fi
-}
-
 setAlt(){
   i=$1
   needle=$2
@@ -78,18 +36,21 @@ setAlt(){
               {count = count + 1; if (count=selection) { print $(selection)} }
       ')"
       printInfo "Setting alternative: $selection: $newver"
-      printVerbose "Removing symlinks from current version"
-      $utildir/zopen-remove $needle --silent
-      [ -d $newver ] || printError "Mismatch found, no version directory at $newver" 
+      if [ ! -z $current ]; then
+        printVerbose "Removing symlinks from current version"
+        $utildir/zopen-remove $needle --silent
+      fi
+      [ -d $ZOPEN_PKGINSTALL/$newver ] || printError "Mismatch found, no version directory at $newver" 
       [ ! -z "$needle" ] || printError "$ZOPEN_PKGINSTALL/$needle not found"
-      printVerbose "Removing master link"
-      rm -rf $ZOPEN_PKGINSTALL/$needle
-
+      if -e $ZOPEN_PKGINSTALL/$needle; then
+        printVerbose "Removing master link"
+        rm -rf $ZOPEN_PKGINSTALL/$needle
+      fi
       printVerbose "Generating main link from $needle to version: $newver"
       if ! ln -sf $newver $ZOPEN_PKGINSTALL/$needle; then
         printError "Could not create symbolic link name"
       fi
-      symlinkIntoSystem $needle
+      symlinkIntoSystem $needle $ZOPEN_PKGINSTALL
       touch "${ZOPEN_PKGINSTALL}/${needle}/.active"
       version="unknown"
       if [ -e "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo" ]; then

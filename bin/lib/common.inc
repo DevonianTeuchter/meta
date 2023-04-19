@@ -140,6 +140,82 @@ mutexFree(){
   mutex="$lockdir/$mutex"
   [ -e "$mutex" ] && rm -f $mutex
 }
+# Calculate the relative path from $1 to $2
+relativePath(){
+  sourcePath=$1
+  targetPath=$2
+  currentIFS="$IFS"
+  IFS="/"
+  relativePath=''
+  set -- $targetPath
+  for elem in $sourcePath; do
+    if [ -z "$relativePath" ]; then
+      [ "$1" = "$elem" ] || relativePath="$1"
+    else
+      relativePath="../$relativePath"
+      [ ! -z "$1" ] && relativePath="$relativePath/$1"
+    fi
+    if [ $# -gt 0 ]; then
+      shift
+    fi
+  done
+  # if the target is longer than the source, there might be some additional
+  # elements to append
+  relativePath=$relativePath/$(echo $* | sed "s/ /\//g")
+  IFS="$curIFS"
+  echo "$relativePath"
+}
+# Links a package directory into the main zopen root filesystem
+symlinkIntoSystem(){
+  name=$1
+  baseinstalldir=$2
+
+  printInfo "- Integrating package into file system"
+  basedir=$baseinstalldir/$name/
+  printVerbose "Changing working directory to the install dir for the package"
+  cd $basedir
+
+  target=$ZOPEN_ROOTFS/usr
+  dirs=$(zosfind $basedir -type d | grep -v "\.git" | sort -r)
+  ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
+  dircnt=0
+  echo "# Installed links by package: $name" > $basedir/.links
+  printInfo "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+  echo "$dirs" | while read dir; do
+    dircnt=$(expr $dircnt + 1)
+    trimdir=$(echo $dir | sed "s#^$basedir##")
+    if [[ ! "x$trimdir" = "x" ]]; then 
+      mkdir -p $target/$trimdir
+      filestolink=$(zosfind $dir -type f)
+      nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
+      flecnt=0
+      pct=0
+      ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+      echo "$filestolink" | while read filetolink; do
+        flecnt=$(expr $flecnt + 1)
+        pct=`expr $flecnt \* 100`
+        pct=`expr $pct / $nfiles`
+        ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+        trimfile=$(echo $filetolink | sed "s#^$basedir##")
+        if [ ! -z $trimfile ]; then
+          relpath=$(relativePath "$target/$trimfile" "$filetolink" )
+          exename="$(basename $filetolink)"
+          rootdir="$(dirname $target/$trimfile)"
+          if cd $rootdir && ln -fs $relpath $exename; then
+            abspath=$(echo "$target/$trimfile" | sed "s#^$ZOPEN_ROOTFS/##")
+            printVerbose "Converted relative path '$relpath' to absolute under zopen_rootfs: $abspath"
+            echo "$abspath " >> $basedir/.links
+          else
+            printInfo "${ERASELINE}- ${NC}${RED}Issue with linking '$filetolink' to '$target/$trimfile'${NC}"
+            printInfo "\n${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+          fi
+        fi
+      done
+    fi
+  done
+  ansiupdate 3 -30 "${ERASELINE}- Processed ${ndirs} of ${ndirs}"
+  printInfo "- Integration complete"
+}
 
 zopenInitialize()
 {

@@ -44,49 +44,6 @@ getContentsFromGithub()
   echo "$repo_results";
 }
 
-symlinkIntoSystem(){
-  if ! $nosymlink; then
-    printInfo "- Integrating package into file system"
-
-    basedir=$baseinstalldir/$name/
-    target=$ZOPEN_ROOTFS/usr
-    dirs=$(zosfind $basedir -type d | grep -v "\.git" | sort -r)
-    ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
-    dircnt=0
-    printInfo "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-    echo "$dirs" | while read dir; do
-      dircnt=$(expr $dircnt + 1)
-      trimdir=$(echo $dir | sed "s#^$basedir##")
-      if [[ ! "x$trimdir" = "x" ]]; then 
-        mkdir -p $target/$trimdir
-        filestolink=$(zosfind $dir -type f)
-        nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
-        flecnt=0
-        pct=0
-        ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-        echo "$filestolink" | while read filetolink; do
-          flecnt=$(expr $flecnt + 1)
-          pct=`expr $flecnt \* 100`
-          pct=`expr $pct / $nfiles`
-          ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-          trimfile=$(echo $filetolink | sed "s#^$basedir##")
-          if [ ! -z $trimfile ]; then
-            #lnrc=ln -fs $filetolink $target/$trimfile
-            if ln -fs $filetolink $target/$trimfile; then
-              echo "$target/$trimfile" >> $basedir/.links
-            else
-              printInfo "${ERASELINE}- ${NC}${RED}Issue with linking '$filetolink' to '$target/$trimfile'${NC}"
-              printInfo "\n${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
-            fi
-          fi
-        done
-      fi
-    done
-    ansiupdate 3 -30 "${ERASELINE}- Processed ${ndirs} of ${ndirs}"
-    printInfo "- Integration complete"
-  fi
-}
-
 installDependencies()
 (
   name=$1
@@ -336,7 +293,9 @@ handlePackageInstall(){
     fi
 
     if $setactive; then
-      symlinkIntoSystem
+      if ! $nosymlink; then
+        symlinkIntoSystem $name $baseinstalldir
+      fi
 
       printInfo "- Checking for env file"
       if [ -f ${baseinstalldir}/${name}/.env ]; then
@@ -428,7 +387,7 @@ while [[ $# -gt 0 ]]; do
     "-l" | "--local-install")
       localInstall=true
       ;;
-    "-n" | "--nosymlink")
+    "--no-symlink")
       nosymlink=true
     ;;
     "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
