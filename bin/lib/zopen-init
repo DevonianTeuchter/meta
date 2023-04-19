@@ -25,11 +25,11 @@ printSyntax()
 args=$*
 
 verbose=false
-layoutfs="zopen"
+fslayout="usrlclz"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    "-f")
-      layoutfs=$2
+    "-f" | "--fs-layout" )
+      fslayout=$2
       shift
       ;;
     "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
@@ -45,25 +45,28 @@ while [[ $# -gt 0 ]]; do
   esac
   shift;
 done
-case "$layoutfs" in
-  fhs|ibm|prod|zopen)
+case "$fslayout" in
+  fhs|ibm|prod|zopen|usrlcl|usrlclz)
   ;;
   *)
-    printError "${NC}${RED}The filesystem layout $layoutfs is unrecognised"
+    printError "${NC}${RED}The filesystem layout $fslayout is unrecognised"
     ;;
 esac
 printHeader "Initialize zopen framework"
 if [ ! -z "$ZOPEN_ROOT_PATH" ]; then
   rootfs="$ZOPEN_ROOT_PATH"
+    printInfo "- Setting root directory from ZOPEN_ROOT_PATH envvar: $rootfs"
 fi
 
 if [ -z "$rootfs" ]; then
   printInfo "- Enter fully-qualified path to your zopen root directory (default: \$HOME/zopen)"
   rootfs=$(getInput)
+else
+  printInfo "- Setting root directory from cli: $rootfs"
 fi
 
 if [ -z "$rootfs" ]; then
-  echo "Using default: \$HOME/zopen"
+  printInfo "- No explicit root set, using default: \$HOME/zopen"
   rootfs="$HOME/zopen"
 fi
 
@@ -91,13 +94,19 @@ printInfo "- Creating path for bootstrap files"
 
 printInfo "- Creating symbolic path for prod redirect files"
 [[ -e "$rootfs/usr/share/zopen/boot" ]] || ln -s "$rootfs/boot" "$rootfs/usr/share/zopen/boot"
-case "$layoutfs" in
+case "$fslayout" in
+  "usrlclz")
+    zopen_pkginstall="/usr/local/zopen"
+  ;;
+  "usrlcl")
+    zopen_pkginstall="/usr/local"
+  ;;
   "fhs")
     zopen_pkginstall="opt"
   ;;
   "ibm")
     zopen_pkginstall="usr/lpp"
-    ;;
+  ;;
   "prod")
     zopen_pkginstall="prod"
   ;;
@@ -112,18 +121,22 @@ printInfo "- Creating path for certificate lookups"
 ZOPEN_CA_DIR="etc/pki/tls/certs"  # TODO: Work out "proper" location
 [[ -e "$rootfs/$ZOPEN_CA_DIR" ]] || mkdir -p "$rootfs/$ZOPEN_CA_DIR"
 
-# Save the configuration to the file
-echo "ZOPEN_ROOTFS=$rootfs" > "$HOME/.zopen-config"
+# Save the configuration to the file - overwrite any existing file with the title initially
+echo "# z/OS Open Tools Configuration file" > "$HOME/.zopen-config"
+echo "# Main root location for the zopen installation; can be changed if the " >> "$HOME/.zopen-config"
+echo "# underlying root location is copied/moved elsewhere as locations are " >> "$HOME/.zopen-config"
+echo "# relative to this envvar value" >> "$HOME/.zopen-config"
+echo "ZOPEN_ROOTFS=$rootfs" >> "$HOME/.zopen-config"
 echo "export ZOPEN_ROOTFS" >> "$HOME/.zopen-config"
 
 # Add the profiled processing first so the zopen paths are added first
 cat << EOF >>  "$HOME/.zopen-config"
 TMP_FIFO_PIPE="\$HOME/.zopen-config.pipe"
 atExit() {
-  sig=$?
-  [ -p $TMP_FIFO_PIPE ] && rm -rf $TMP_FIFO_PIPE
+  sig=\$?
+  [ -p \$TMP_FIFO_PIPE ] && rm -rf \$TMP_FIFO_PIPE
   trap - EXIT INT TERM QUIT HUP
-  exit $sig
+  exit \$sig
 }
 
 trap "atExit" EXIT INT TERM QUIT HUP
