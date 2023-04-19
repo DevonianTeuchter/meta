@@ -66,9 +66,10 @@ setAlt(){
 listAlts(){
   sett=$1
   needle=$2
-  found=$(zosfind $ZOPEN_PKGINSTALL -name "*/${needle}-*" -prune -type d -o -type l | grep "/${needle}-[^/]*")
+
+  found=$(zosfind $ZOPEN_PKGINSTALL -type d -o -type l| grep "$needle-[^/]*$" | sed -e "s#$ZOPEN_PKGINSTALL/##")
   if [[ -z $found ]]; then
-    printInfo "No currently installed version of package '${needle}'"
+    printInfo "No currently available version of package '${needle}'"
     exit 4
   fi
   if [ -e $ZOPEN_PKGINSTALL/$needle ]; then
@@ -78,26 +79,14 @@ listAlts(){
 
   i=0
   current=0
-# the below would be simpler, but creates a subshell so can't get the number of entries outside!  
+# just the below would be simpler, but creates a subshell so can't get the number of entries outside!  
 #  echo "$found" | xargs | tr ' ' '\n' | while read repo; do
   TMP_FIFO_PIPE="$HOME/altselect.pipe"
   [[ ! -p $TMP_FIFO_PIPE ]] || rm -f $TMP_FIFO_PIPE
   mkfifo $TMP_FIFO_PIPE
-  echo "$found" | xargs | tr ' ' '\n'>> $TMP_FIFO_PIPE &
+  echo "$found" | xargs | tr ' ' '\n' >> $TMP_FIFO_PIPE &
   while read repo; do
     printVerbose "Parsing repo: '$repo' as '${repo#$ZOPEN_PKGINSTALL/}'"
-
-    if [[ "${repo}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
-      printVerbose "Working around possible bug in FIFO that converts initial char to alert/bell 0x07/'\a'"
-      if ! $(type od); then
-        printVerbose "Displaying erroneous string"
-        out=$(echo "${repo}" | od -cx)
-        printVerbose "String details:\n '$out'"
-      fi
-      repo="/$(echo $repo | cut -b 2-)"
-      printVerbose "Repo:='$repo'"
-      syslog $ZOPEN_LOG_PATH/audit.log $LOG_W "$CAT_FILE,$CAT_SYS" "ALT" "listAlts" "FIFO character issue while reading from $TMP_FIFO_PIPE. Workaround applied"
-    fi
     i=$(expr $i + 1)
     if [[ "${deref#$ZOPEN_PKGINSTALL/}" = "${repo#$ZOPEN_PKGINSTALL/}" ]]; then
       current=$i
