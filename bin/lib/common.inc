@@ -252,8 +252,10 @@ printElapsedTime()
 
 processConfig()
 {
-  if [ -f "$HOME/.zopen-config" ]; then
-    . "$HOME/.zopen-config"
+  if [ -z $ZOPEN_ROOTFS ]; then
+    if [ -f "$HOME/.zopen-config" ]; then
+      . "$HOME/.zopen-config"
+    fi
   fi
 }
 
