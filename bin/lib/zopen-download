@@ -23,7 +23,7 @@ printSyntax()
   echo "  --nosymlink: do not integrate into filesystem through symlink redirection. " >&2
   echo "  -v: run in verbose mode" >&2
   echo "  --download-only: download package to current directory" >&2
-  echo "  -l, --local-install: download and unpackage to current directory" >&2
+  echo "  --local-install: download and unpackage to current directory" >&2
   echo "  and <package> is a list of one or more projects to install" >&2
 }
 
@@ -236,7 +236,7 @@ handlePackageInstall(){
     printError "${pax} was not found after downloaded!?!"
   fi
 
-  if ! $downloadOnly; then
+  if ! $downloadOnly & ! $cacheOnly; then
     if $unInstallOldVersion; then
       printVerbose "Uninstalling any previous version - silently"
       # This will remove any old symlinks or dirs that might have changed in an upgrade
@@ -364,6 +364,7 @@ upgradeInstalled=false
 verbose=false
 selectVersion=false
 setActive=true
+cacheOnly=false
 downloadOnly=false
 localInstall=false
 reinstall=false
@@ -384,18 +385,17 @@ while [[ $# -gt 0 ]]; do
     "--install-or-upgrade")
       installOrUpgrade=true
       ;;
-    "-l" | "--local-install")
+    "--local-install")
       localInstall=true
       ;;
     "--no-symlink")
       nosymlink=true
-    ;;
-    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
-      printSyntax "${args}"
-      exit 4
       ;;
-    "--nodeps")
+    "--no-deps")
       doNotInstallDeps=true
+      ;;
+    "--cache-only")
+      cacheOnly=true
       ;;
     "--download-only")
       downloadOnly=true
@@ -411,6 +411,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--select")
       selectVersion=true
+      ;;
+    "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
+      printSyntax "${args}"
+      exit 4
       ;;
     "-v" | "--v" | "-verbose" | "--verbose")
       verbose=true
