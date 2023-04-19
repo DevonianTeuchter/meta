@@ -241,7 +241,7 @@ handlePackageInstall(){
       printVerbose "Uninstalling any previous version - silently"
       # This will remove any old symlinks or dirs that might have changed in an upgrade
       # for example, even if it's a reinstall [updated file might still be different!]
-      remove=$(zopen remove ${name} --silent)
+      remove=$(zopen remove ${name})
     fi
     installdirname=${pax%.pax.Z} # Use full pax name as default
 
@@ -326,6 +326,7 @@ EOF
     elif $reinstall; then
       printVerbose "- Reinstalling so no dependency reinstall (unless explicitly listed)"
     else
+      printInfo "- Checking for runtime dependencies"
       printVerbose "Checking for .runtimedeps file"
       if [ -e ${baseinstalldir}/${name}/.runtimedeps ]; then
         dependencies=$(cat ${baseinstalldir}/${name}/.runtimedeps)
@@ -340,7 +341,10 @@ EOF
       dependencies=$(deleteDuplicateEntries "$dependencies" " ")
       if [ ! "x" = "x$dependencies" ]; then
         printInfo "- $name depends on: $dependencies"
+        printInfo "- Installing dependencies"
         installDependencies "$name" "$dependencies"
+      else
+        printInfo "- No runtime dependencies found"
       fi
     fi
     printInfo "${NC}${GREEN}Successfully installed $name${NC}"

@@ -61,7 +61,7 @@ unsymlinkFromSystem(){
 }
 removePackageDirectories(){
   pkg=$1
-  [ $silent ] && printInfo "- Removing any directories associated with package"
+  [ $silent ] || printInfo "- Removing any directories associated with package"
   zosfind $ZOPEN_ROOTFS/usr/ -type d -name $pkg -print | sort -r | while read rmdir; do
     printVerbose "Removing orphaned directory: $rmdir"  
     rm -rf $rmdir
@@ -70,36 +70,39 @@ removePackageDirectories(){
 removePackages(){
   pkglist=$*
   echo "$pkglist" | xargs | tr ' ' '\n' | sort | while read pkg; do
-    [ $silent ] && printHeader "Removing package: $pkg"
-    [ $silent ] && printInfo "- Checking status of package '$pkg'"
+    [ $silent ] || printHeader "Removing package: $pkg"
+    [ $silent ] || printInfo "- Checking status of package '$pkg'"
     if [ ! -f $ZOPEN_PKGINSTALL/$pkg/.active ]; then 
-      [ $silent ] && printInfo "${NC}${YELLOW}Package '$pkg' is not installed${NC}"
+      [ $silent ] || printInfo "${NC}${YELLOW}Package '$pkg' is not installed${NC}"
     else
-      [ $silent ] && printInfo "- Package installed, unmeshing from system"
+      [ $silent ] || printInfo "- Package installed, unmeshing from system"
       version="unknown"
       if [ -e "${ZOPEN_PKGINSTALL}/${pkg}/.releaseinfo" ]; then
         version=$(cat "${ZOPEN_PKGINSTALL}/${pkg}/.releaseinfo")
       fi
-      unsymlinkFromSystemVerbose $pkg
+      unsymlinkFromSystem $pkg
       if [ -e $ZOPEN_PKGINSTALL/$pkg ]; then
         deref=$(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P | awk -F/ '{ print $(NF)}')
         if $purge; then
-          [ $silent ] && printInfo "- Purging package"
+          [ $silent ] || printInfo "- Purging package"
+          printVerbose "Checking if we are currently in a directory that is to be purged"
+          [ "${PWD##$ZOPEN_PKGINSTALL/$pkg}" != "$PWD" ] && cd $ZOPEN_PKGINSTALL
           rm -rf $(cd $ZOPEN_PKGINSTALL/$pkg && pwd -P)
           syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Prurging package:'${needle};version:$version;"
         else
-          [ $silent ] && printInfo "- Removing metadata file to mark uninstall"
+          [ $silent ] || printInfo "- Removing metadata file to mark uninstall"
           rm -f $ZOPEN_PKGINSTALL/$pkg/.active
         fi
       fi
-      [ $silent ] && printInfo "- Breaking link from current to versioned"
+      [ $silent ] || printInfo "- Breaking link from current to versioned"
       rm -f $ZOPEN_PKGINSTALL/$pkg/
-      [ $silent ] && printInfo "- Removing profiled entry"
+      
+      [ $silent ] || printInfo "- Removing profiled entry"
       [[ ! -d $ZOPEN_ROOTFS/etc/profiled/$pkg ]] || rm -rf $ZOPEN_ROOTFS/etc/profiled/$pkg 
-
+      
       removePackageDirectories $pkg
       syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_REMOVE" "REMOVE" "removePackage" "Removed package:'${needle};version:$version;"
-      [ $silent ] && printInfo "${NC}${GREEN}Successfully removed: $pkg${NC}"
+      [ $silent ] || printInfo "${NC}${GREEN}Successfully removed: $pkg${NC}"
     fi
   done
 }
