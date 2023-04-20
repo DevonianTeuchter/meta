@@ -98,10 +98,10 @@ printInfo "- Creating symbolic path for prod redirect files"
 [[ -e "$rootfs/usr/share/zopen/boot" ]] || ln -s "$rootfs/boot" "$rootfs/usr/share/zopen/boot"
 case "$fslayout" in
   "usrlclz")
-    zopen_pkginstall="/usr/local/zopen"
+    zopen_pkginstall="usr/local/zopen"
   ;;
   "usrlcl")
-    zopen_pkginstall="/usr/local"
+    zopen_pkginstall="usr/local"
   ;;
   "fhs")
     zopen_pkginstall="opt"
