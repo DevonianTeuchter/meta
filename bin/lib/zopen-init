@@ -207,16 +207,30 @@ printInfo "- Created config in $HOME/.zopen-config."
 
 printInfo "- Root FS available at $rootfs"
 export ZOPEN_ROOTFS=$rootfs
-printInfo "- Running bootstrap"
+set -x
+printInfo "- Check for local curl pax"
 curlpax="curl-7.83.1.20230120_231325.zos.pax.Z"
-curlurl="https://github.com/ZOSOpenTools/curlport/releases/download/curlport_420/$curlpax"
-bootstrap=$($utildir/zopen-bootstrap.rexx $curlurl)
-printInfo "- Bootstrapped curl downloaded. Configuring for use..."
-printVerbose "- Expanding curl..."
+if [ -e "../$curlpax" ]; then
+  printInfo "- Found $curlpax. Adding to zopen cache to install as bootstrap"
+  cp "../$curlpax" "$rootfs/var/cache/zopen"
+else
+  printInfo "- Downloading curl to cache using HWT"
+  curlurl="https://github.com/ZOSOpenTools/curlport/releases/download/curlport_420/$curlpax"
+  printInfo "- Running REXX bootstrap"
+  bootstrap=$($utildir/zopen-bootstrap.rexx $curlurl)
+  printInfo "- Bootstrapped curl downloaded. Configuring for use..."
+fi
+printVerbose "- Expanding curl to bootstrap dir..."
 cachedir="$rootfs/var/cache/zopen"
-[[ -e $cachedir/$curlpax ]] || printError "Could not locate downloaded curl pax."
+[[ -e "$cachedir/$curlpax" ]] || printError "Could not locate downloaded curl pax."
 paxrc=$(pax -rf $cachedir/$curlpax -s##$rootfs/boot/#)
 
+[[ -e "../cacert.pem" ]] && cp "../cacert.pem" "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
+if [ -e "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem" ]; then
+  printInfo "- Setting certificate envvar"
+  export SSL_CERT_FILE="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"
+fi
+set +x
 # Need to source the .env file from within the actual curl directory and cannot
 # spawn sub-process otherwise no access to environment from this script so run inline
 curlfile="$(ls $rootfs/boot |grep curl)"
@@ -227,12 +241,12 @@ cd $rootfs/boot/$curlfile/
 . .env
 cd $curwd
 
-printInfo "- Updating CA cert [to resolve previous SSL_CERT_FILE warnings]"
+printInfo "- Updating CA cert"
 ZOPEN_CA="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
 mkdir -p $ZOPEN_CA
 ZOPEN_CA="$ZOPEN_CA/cacert.pem"
 export ZOPEN_CA
-runAndLog "${utildir}/zopen-update-cacert -i -f"
+runAndLog "${utildir}/zopen-update-cacert -f"
 printInfo "- Sourcing environment"
 . $HOME/.zopen-config
 printInfo "- Using bootstrapped curl to install latest release of itself (if available)"
