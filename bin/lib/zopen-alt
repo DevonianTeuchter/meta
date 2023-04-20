@@ -42,7 +42,7 @@ setAlt(){
       fi
       [ -d $ZOPEN_PKGINSTALL/$newver ] || printError "Mismatch found, no version directory at $newver" 
       [ ! -z "$needle" ] || printError "$ZOPEN_PKGINSTALL/$needle not found"
-      if -e $ZOPEN_PKGINSTALL/$needle; then
+      if [ -e $ZOPEN_PKGINSTALL/$needle ]; then
         printVerbose "Removing master link"
         rm -rf $ZOPEN_PKGINSTALL/$needle
       fi
