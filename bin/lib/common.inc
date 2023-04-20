@@ -131,7 +131,10 @@ mutexReq(){
   [ -e lockdir ] || mkdir -p $lockdir
   mutex="$lockdir/$mutex"
   mypid=$(exec sh -c 'echo $PPID')
-  [ -e "$mutex" ] && [ ! "$(cat my_file)" = "$mypid" ] && echo "Aborting, Lock for $2 already taken" && exit -1
+  if [ -e "$mutex" ]; then
+    lockedpid=$(cat $mutex)
+    { [ ! "$lockedpid" = "$mypid" ] && [ ! "$lockedpid" = "$PPID" ]; } && echo "Aborting, Lock for $2 already taken" && exit -1
+  fi
   echo "$mypid" > $mutex
   trap "rm -rf $mutex" EXIT
 }
