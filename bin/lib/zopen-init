@@ -11,13 +11,15 @@ printSyntax()
 {
   args=$*
   echo "zopen init will initialize the zopen filesystem and configuration (create a $HOME/.zopen-config file)" >&2
-  echo "Syntax: zopen init [<option>] <root-dir>" >&2
+  echo "Syntax: zopen init [<option>] [<root-dir>]" >&2
   echo "  where <option> can be one or more of:" >&2
-  echo "  -f <type>: use an alternative virtual filesystem layout" >&2
+  echo "  -f <type>: virtual filesystem location for package management; packages will be installed to this location under the <root-dir>" >&2
+  echo "      usrlclz - /usr/local/zopen (default);" >&2 
   echo "      zopen - /usr/zopen (default);" >&2
   echo "      prod - zopen standard;" >&2
   echo "      ibm  - /usr/lpp;" >&2
   echo "      fhs  - File Hierarchical Standard (/opt)"  >&2
+  echo "      usrlcl - /usr/local;">&2
   echo "  -v: run in verbose mode" >&2
   echo "  -?: display help" >&2
 }
