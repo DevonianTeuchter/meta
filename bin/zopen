@@ -9,24 +9,24 @@ printSyntax()
   printInfo "where ${NC}${BOLD}<command>${NC} may be one of the following:" >&2
   printInfo "  ${NC}${BOLD}init         ${NC}   generate \$HOME/.zopen-config, creates file structure and bootstraps" >&2
   printInfo "  ${NC}${BOLD}build        ${NC}   invokes the build script." >&2
-  printInfo "  ${NC}${BOLD}download     ${NC}   downloads z/OS Open Tool package(s)" >&2
-  printInfo "  ${NC}${BOLD}install      ${NC}   installs z/OS Open Tool package(s))" >&2
+  printInfo "  ${NC}${BOLD}download     ${NC}   downloads z/OS Open Tools package(s)" >&2
+  printInfo "  ${NC}${BOLD}install      ${NC}   installs z/OS Open Tools package(s))" >&2
   printInfo "  ${NC}${BOLD}generate     ${NC}   generate a zopen project" >&2
   printInfo "  ${NC}${BOLD}update-cacert${NC}   update the cacert.pem file" >&2
   printInfo "  ${NC}${BOLD}upgrade      ${NC}   upgrades already installed tools" >&2
-  printInfo "  ${NC}${BOLD}list         ${NC}   lists information about zOpen Tool packages" >&2
-  printInfo "  ${NC}${BOLD}query        ${NC}   queries zOpen Tool packages (see " >&2
-  printInfo "  ${NC}${BOLD}search       ${NC}   searches remote repo for zOpen Tool package" >&2
-  printInfo "  ${NC}${BOLD}remove       ${NC}   removes installed zOpen Tool packages" >&2
-  printInfo "  ${NC}${BOLD}alt          ${NC}   switch local versions of zOpen Tool packages" >&2
-  printInfo "  ${NC}${BOLD}clean        ${NC}   cleans various aspects of zOpen Tool packages" >&2
+  printInfo "  ${NC}${BOLD}list         ${NC}   lists information about z/OS Open Tools packages" >&2
+  printInfo "  ${NC}${BOLD}query        ${NC}   queries z/OS Open Tools packages" >&2
+  printInfo "  ${NC}${BOLD}search       ${NC}   searches remote repo for z/OS Open Tools package" >&2
+  printInfo "  ${NC}${BOLD}remove       ${NC}   removes installed z/OS Open Tools packages" >&2
+  printInfo "  ${NC}${BOLD}alt          ${NC}   switch local versions of z/OS Open Tools packages" >&2
+  printInfo "  ${NC}${BOLD}clean        ${NC}   cleans various aspects of z/OS Open Tools packages" >&2
   echo "" >&2
 }
 
 printHelp() 
 {
   args=$*
-  echo "zopen is a general purpose script to be used with the ZOSOpenTools ports." >&2
+  echo "zopen is a general purpose script to be used with the z/OS Open Tools ports." >&2
   printSyntax
   echo "Example usage:" >&2
   echo " # Build a port" >&2
