@@ -1,7 +1,6 @@
 #!/bin/sh
 # Initialize zopen
 
-echo $utildir
 if [ -z "$utildir" ]; then
   export utildir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
 fi
@@ -20,6 +19,8 @@ printSyntax()
   echo "      ibm  - /usr/lpp;" >&2
   echo "      fhs  - File Hierarchical Standard (/opt)"  >&2
   echo "      usrlcl - /usr/local;">&2
+  echo "  --re-init - re-initialize a previous installation (if present).  Re-initializing over a previous installation will re-use existing package structures and configurations." >&2
+  echo "  --clone - clones the current installation to a different location" >&2
   echo "  -v: run in verbose mode" >&2
   echo "  -?: display help" >&2
 }
@@ -27,12 +28,20 @@ printSyntax()
 args=$*
 
 verbose=false
+reinitExisting=false
+clone=false
 fslayout="usrlclz"
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   case "$1" in
     "-f" | "--fs-layout" )
       fslayout=$2
       shift
+      ;;
+    "--re-init" )
+      reinitExisting=true
+      ;;
+    "--clone" )
+      clone=true
       ;;
     "-h" | "--h" | "-help" | "--help" | "-?" | "-syntax")
       printSyntax "${args}"
@@ -55,85 +64,139 @@ case "$fslayout" in
     ;;
 esac
 printHeader "Initialize zopen framework"
-if [ ! -z "$ZOPEN_ROOT_PATH" ]; then
+
+configFile="$HOME/.zopen-config"
+
+if $clone; then
+  [ ! -e "$configFile" ] && printError "- Unable to clone existing configuration; configuration file $configFile could not be read"
+  printInfo "- Cloning existing configuration"
+  configFile=".zopen-config.clone"
+elif [ -e "$configFile" ]; then
+  if ! $reinitExisting; then
+    printWarning "- Existing configuration file found; re-initializing might lose access to previously installed packages. Continue (y/n)?"
+    reinit=$(getInput)
+  fi
+  if $reinitExisting || { [ -n "$reinit" ] && [ "y" = "${reinit}" ]; }; then
+    printInfo "- Re-initializing; removing existing .zopen-config"
+    rmrf=$(rm -rf "$configFile")
+  else
+    printWarning "- Stopping. Pre-existing configuration will be preserved"
+    exit 8
+  fi
+fi
+
+if [ -n "$ZOPEN_ROOT_PATH" ]; then
   rootfs="$ZOPEN_ROOT_PATH"
-    printInfo "- Setting root directory from ZOPEN_ROOT_PATH envvar: $rootfs"
+  printInfo "- Setting root directory from ZOPEN_ROOT_PATH envvar: $rootfs"
 fi
 
 if [ -z "$rootfs" ]; then
-  printInfo "- Enter fully-qualified path to your zopen root directory (default: \$HOME/zopen)"
+  if $clone; then
+    printInfo "- Enter fully-qualified path to clone-target directory:"
+  else
+    printInfo "- Enter fully-qualified path to your zopen root directory (default: \$HOME/zopen)"
+  fi
   rootfs=$(getInput)
 else
   printInfo "- Setting root directory from cli: $rootfs"
 fi
 
 if [ -z "$rootfs" ]; then
+  if $clone; then
+    printError "- No target location for clone. Stopping."
+  fi
   printInfo "- No explicit root set, using default: \$HOME/zopen"
   rootfs="$HOME/zopen"
 fi
 
 echo "- Enter the github oauth token for use in zopen-download. If none (not recommended), press enter"
 zopen_oauth=$(getInputHidden)
-if [ ! -z "$zopen_oauth" ]; then
+if [ -n "$zopen_oauth" ]; then
   zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$zopen_oauth"
 else
   # Placeholder in the .zopen-config
   zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN="
 fi
 
-printInfo "- Populating standard file system"
-[[ -e "$rootfs/bin" ]] || mkdir -p "$rootfs/bin"
-[[ -e "$rootfs/etc" ]] || mkdir -p "$rootfs/etc"
-[[ -e "$rootfs/include" ]] || mkdir -p "$rootfs/include"
-[[ -e "$rootfs/usr/share" ]] || mkdir -p "$rootfs/usr/share"
-[[ -e "$rootfs/usr/share/man" ]] || mkdir -p "$rootfs/usr/share/man"
-[[ -e "$rootfs/usr/share/zopen" ]] || mkdir -p "$rootfs/usr/share/zopen"
-[[ -e "$rootfs/var/cache/zopen" ]] || mkdir -p "$rootfs/var/cache/zopen"
-[[ -e "$rootfs/var/log" ]] || mkdir -p "$rootfs/var/log"
+if ! $clone; then
+  printInfo "- Populating standard file system"
+  [ -e "$rootfs/bin" ] || mkdir -p "$rootfs/bin"
+  [ -e "$rootfs/etc" ] || mkdir -p "$rootfs/etc"
+  [ -e "$rootfs/include" ] || mkdir -p "$rootfs/include"
+  [ -e "$rootfs/usr/share" ] || mkdir -p "$rootfs/usr/share"
+  [ -e "$rootfs/usr/share/man" ] || mkdir -p "$rootfs/usr/share/man"
+  [ -e "$rootfs/usr/share/zopen" ] || mkdir -p "$rootfs/usr/share/zopen"
+  [ -e "$rootfs/var/cache/zopen" ] || mkdir -p "$rootfs/var/cache/zopen"
+  [ -e "$rootfs/var/log" ] || mkdir -p "$rootfs/var/log"
+  
+  printInfo "- Creating path for bootstrap files"
+  [ -e "$rootfs/boot" ] || mkdir -p "$rootfs/boot"
+  
+  printInfo "- Creating symbolic path for prod redirect files"
+  [ -e "$rootfs/usr/share/zopen/boot" ] || ln -s "$rootfs/boot" "$rootfs/usr/share/zopen/boot"
+  case "$fslayout" in
+    "usrlclz")
+      zopen_pkginstall="usr/local/zopen"
+    ;;
+    "usrlcl")
+      zopen_pkginstall="usr/local"
+    ;;
+    "fhs")
+      zopen_pkginstall="opt"
+    ;;
+    "ibm")
+      zopen_pkginstall="usr/lpp"
+    ;;
+    "prod")
+      zopen_pkginstall="prod"
+    ;;
+    "zopen")
+      zopen_pkginstall="usr/zopen"
+    ;;
+  esac
+  [ -e "$rootfs/etc/zopen" ] || mkdir -p "$rootfs/etc/zopen"
+  echo "$zopen_pkginstall" > "$rootfs/etc/zopen/fstype"
+  
+  [ -e "$rootfs/$zopen_pkginstall" ] || mkdir -p "$rootfs/$zopen_pkginstall"
+  [ -e "$rootfs/usr/share/zopen/prod" ] || ln -s "$rootfs/$zopen_pkginstall" "$rootfs/usr/share/zopen/prod"
+else
+  printVerbose "Grabbing pkginstall location from within cloned env"
+  if [ -e "$ZOPEN_ROOTFS/etc/zopen/fstype" ]; then
+    zopen_pkginstall="$(cat $rootfs/etc/zopen/fstype)"
+  else
+    printError "Unable to locate $ZOPEN_ROOTFS/etc/zopen/fstype; cannot clone unrecognisable file system"
+  fi
+fi
 
-printInfo "- Creating path for bootstrap files"
-[[ -e "$rootfs/boot" ]] || mkdir -p "$rootfs/boot"
-
-printInfo "- Creating symbolic path for prod redirect files"
-[[ -e "$rootfs/usr/share/zopen/boot" ]] || ln -s "$rootfs/boot" "$rootfs/usr/share/zopen/boot"
-case "$fslayout" in
-  "usrlclz")
-    zopen_pkginstall="usr/local/zopen"
-  ;;
-  "usrlcl")
-    zopen_pkginstall="usr/local"
-  ;;
-  "fhs")
-    zopen_pkginstall="opt"
-  ;;
-  "ibm")
-    zopen_pkginstall="usr/lpp"
-  ;;
-  "prod")
-    zopen_pkginstall="prod"
-  ;;
-  "zopen")
-    zopen_pkginstall="usr/zopen"
-  ;;
-esac
-[[ -e "$rootfs/$zopen_pkginstall" ]] || mkdir -p "$rootfs/$zopen_pkginstall"
-[[ -e "$rootfs/usr/share/zopen/prod" ]] || ln -s "$rootfs/$zopen_pkginstall" "$rootfs/usr/share/zopen/prod"
-
-printInfo "- Creating path for certificate lookups"
+if [ "$ZOPEN_PKGINSTALL" = "$rootfs" ]; then
+   printWarning "Package install location is the zopen root location; this is not recommended. Continue (y/n)"
+   pkgoverlaysrootfs=$(getInput)
+   if [ -n "$pkgoverlaysrootfs" ] && [ "y" = "${pkgoverlaysrootfs}" ]; then
+     printInfo "- Continuing. Packages will be installed into the zopen root location: $rootfs"
+   else
+     printWarning "- Stopping. Existing configuration will be preserved"
+     exit 8
+   fi
+fi 
 ZOPEN_CA_DIR="etc/pki/tls/certs"  # TODO: Work out "proper" location
-[[ -e "$rootfs/$ZOPEN_CA_DIR" ]] || mkdir -p "$rootfs/$ZOPEN_CA_DIR"
+if ! $clone; then
+    printInfo "- Creating path for certificate lookups"
+    [ -e "$rootfs/$ZOPEN_CA_DIR" ] || mkdir -p "$rootfs/$ZOPEN_CA_DIR"
+fi
 
 # Save the configuration to the file - overwrite any existing file with the title initially
-echo "# z/OS Open Tools Configuration file" > "$HOME/.zopen-config"
-echo "# Main root location for the zopen installation; can be changed if the " >> "$HOME/.zopen-config"
-echo "# underlying root location is copied/moved elsewhere as locations are " >> "$HOME/.zopen-config"
-echo "# relative to this envvar value" >> "$HOME/.zopen-config"
-echo "ZOPEN_ROOTFS=$rootfs" >> "$HOME/.zopen-config"
-echo "export ZOPEN_ROOTFS" >> "$HOME/.zopen-config"
+echo "# z/OS Open Tools Configuration file" > "$configFile"
+echo "# Main root location for the zopen installation; can be changed if the " >> "$configFile"
+echo "# underlying root location is copied/moved elsewhere as locations are " >> "$configFile"
+echo "# relative to this envvar value" >> "$configFile"
+echo "ZOPEN_ROOTFS=$rootfs" >> "$configFile"
+echo "export ZOPEN_ROOTFS" >> "$configFile"
+echo "configStartTime=\$SECONDS" >> "$configFile"
+echo "zot=\"z/OS Open Tools\"" >> "$configFile"
 
 # Add the profiled processing first so the zopen paths are added first
-cat << EOF >>  "$HOME/.zopen-config"
-TMP_FIFO_PIPE="\$HOME/.zopen-config.pipe"
+cat << EOF >>  "$configFile"
+TMP_FIFO_PIPE="\$configFile.pipe"
 atExit() {
   sig=\$?
   [ -p \$TMP_FIFO_PIPE ] && rm -rf \$TMP_FIFO_PIPE
@@ -171,18 +234,18 @@ LIBPATH=\$(deleteDuplicateEntries \"\$LIBPATH\" \":\")
 MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
 MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
 
-if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
+if [ -e "\$ZOPEN_ROOTFS/etc/profiled" ]; then
   dotenvs=\$(find "\$ZOPEN_ROOTFS/etc/profiled" -type f -name 'dotenv' -print)
   dotenvcnt=\$(echo "\$dotenvs" | wc -l | tr -d ' ')
   flecnt=0
-  [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
+  [ ! -p \$TMP_FIFO_PIPE ] || rm -f \$TMP_FIFO_PIPE
   mkfifo \$TMP_FIFO_PIPE
   echo "\$dotenvs" | xargs | tr ' ' '\n'>>\$TMP_FIFO_PIPE &
   while read FILE; do
       flecnt=\$(expr \$flecnt + 1)
       pct=\$(expr \$flecnt \* 100)
       pct=\$(expr \$pct / \$dotenvcnt)
-    /bin/echo "\047[1A\047[$30D\047[2K- Processing zopen config: \${pct}% (\${flecnt}/\${dotenvcnt})"
+    /bin/echo "\047[1A\047[$30D\047[2K- Processing \$zot configuration: \${pct}% (\${flecnt}/\${dotenvcnt})"
     . \$FILE
     PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
     PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
@@ -191,94 +254,131 @@ if [[ -e "\$ZOPEN_ROOTFS/etc/profiled" ]]; then
     MANPATH=\$ZOPEN_ROOTFS/usr/share/man:\$ZOPEN_ROOTFS/usr/share/man/\%L:\$(sanitizeEnvVar \"\$MANPATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
     MANPATH=\$(deleteDuplicateEntries \"\$MANPATH\" \":\")
   done < \$TMP_FIFO_PIPE
-  [[ ! -p \$TMP_FIFO_PIPE ]] || rm -f \$TMP_FIFO_PIPE
-  /bin/echo "\047[1A\047[\$30D\047[2K- Processed zopen config: 100% (\${dotenvcnt}/\${dotenvcnt})"
+  [ ! -p \$TMP_FIFO_PIPE ] || rm -f \$TMP_FIFO_PIPE
+  /bin/echo "\047[1A\047[\$30D\047[2K- Processed \$zot configuration: 100% (\${dotenvcnt}/\${dotenvcnt})"
   unset dotenvs dotenvcnt flecnt
 fi
 MANPATH="\$MANPATH:"
 export MANPATH
 export LIBPATH
 export PATH
+/bin/echo "- \$zot configuration completed in \$(( \$SECONDS - \$configStartTime )) seconds."
 EOF
 
 printVerbose "Setting configuration file as read-only to user, no access to others"
-chmod 400 $HOME/.zopen-config
-printInfo "- Created config in $HOME/.zopen-config."
+chmod 400 "$configFile"
+printInfo "- Created config in $configFile."
 
 printInfo "- Root FS available at $rootfs"
-export ZOPEN_ROOTFS=$rootfs
-set -x
-printInfo "- Check for local curl pax"
-curlpax="curl-7.83.1.20230120_231325.zos.pax.Z"
-if [ -e "../$curlpax" ]; then
-  printInfo "- Found $curlpax. Adding to zopen cache to install as bootstrap"
-  cp "../$curlpax" "$rootfs/var/cache/zopen"
+
+if $clone; then
+  printInfo "- Cloning from $ZOPEN_ROOTFS to $rootfs"
+  cp -RT "$ZOPEN_ROOTFS" "$rootfs"
+  printInfo "${NC}${CYAN}- Run '. $configFile' to enable cloned environment for current session${NC}"
+  printInfo "${NC}${CYAN}- or manually copy cloned configuration to required location and/or modify .profile"
+  syslog "$ZOPEN_LOG_PATH/audit.log" "$LOG_A" "$CAT_PACKAGE,$CAT_FILE" "INIT" "" "zopen environment cloned to $rootfs"
+  printInfo "${NC}${GREEN}zopen clone complete.${NC}"
 else
-  printInfo "- Downloading curl to cache using HWT"
-  curlurl="https://github.com/ZOSOpenTools/curlport/releases/download/curlport_420/$curlpax"
-  printInfo "- Running REXX bootstrap"
-  bootstrap=$($utildir/zopen-bootstrap.rexx $curlurl)
-  printInfo "- Bootstrapped curl downloaded. Configuring for use..."
-fi
-printVerbose "- Expanding curl to bootstrap dir..."
-cachedir="$rootfs/var/cache/zopen"
-[[ -e "$cachedir/$curlpax" ]] || printError "Could not locate downloaded curl pax."
-paxrc=$(pax -rf $cachedir/$curlpax -s##$rootfs/boot/#)
+  export ZOPEN_ROOTFS="$rootfs"
 
-[[ -e "../cacert.pem" ]] && cp "../cacert.pem" "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
-if [ -e "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem" ]; then
-  printInfo "- Setting certificate envvar"
-  export SSL_CERT_FILE="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"
-fi
-set +x
-# Need to source the .env file from within the actual curl directory and cannot
-# spawn sub-process otherwise no access to environment from this script so run inline
-curlfile="$(ls $rootfs/boot |grep curl)"
-[[ -e $rootfs/boot/$curlfile ]] || printError "Could not locate curl for bootstrap. Re-run 'zopen init' to retry"
-chmod -R 755 $rootfs/boot/$curlfile
-curwd=$PWD
-cd $rootfs/boot/$curlfile/
-. .env
-cd $curwd
-
-printInfo "- Updating CA cert"
-ZOPEN_CA="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
-mkdir -p $ZOPEN_CA
-ZOPEN_CA="$ZOPEN_CA/cacert.pem"
-export ZOPEN_CA
-runAndLog "${utildir}/zopen-update-cacert -f"
-printInfo "- Sourcing environment"
-. $HOME/.zopen-config
-printInfo "- Using bootstrapped curl to install latest release of itself (if available)"
-runAndLog "${utildir}/zopen-download curl"
-
-# Code to use this version of meta as "official" install - pin to ensure no overwriting
-printInfo "- Installing and pinning current (this forked) version of meta" 
-printInfo "Current dir: $utildir"
-metadtInstDir="$ZOPEN_ROOTFS/$zopen_pkginstall/meta-dt"
-mkdir -p $metadtInstDir
-cp -RT ../  $metadtInstDir
-printInfo "- Running alternative utility to allow selection of forked meta"
-runAndLog "${utildir}/zopen-alt meta -s"
-
-
-#TODO: Reinstate following code should this fork merge
-#printInfo "- Installing latest version of meta package into zopen system"
-#runAndLog "${utildir}/zopen-download meta"
-
-printInfo "- zopen bootstrapping complete"
-
-printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
-profileEnable=$(getInput)
-if [ -z profileEnable ] & [ "xyx" = "x${profileEnable}x" ]; then
-  if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
-    printVerbose "Line not present (grep returned non-0)"
-cat << EOF >>  "$HOME/.profile"
-[[ -e "\$HOME/.zopen-config" ]] && . \$HOME/.zopen-config
-EOF
+  printInfo "- Check for local curl pax"
+  curlpax="curl-7.83.1.20230120_231325.zos.pax.Z"
+  if [ -e "../$curlpax" ]; then
+    printInfo "- Found $curlpax. Adding to zopen cache to install as bootstrap"
+    cp "../$curlpax" "$rootfs/var/cache/zopen"
+  else
+    printInfo "- Downloading curl to cache using HWT"
+    curlurl="https://github.com/ZOSOpenTools/curlport/releases/download/curlport_420/$curlpax"
+    printInfo "- Running REXX bootstrap"
+    bootstrap=$($utildir/zopen-bootstrap.rexx $curlurl)
+    printInfo "- Bootstrapped curl downloaded. Configuring for use..."
   fi
-fi
-printInfo "${NC}${YELLOW}- Run '. \$HOME/.zopen-config' to enable zopen environment for current session${NC}"
-syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_PACKAGE,$CAT_FILE" "INIT" "" "zopen environment initialised as $ZOPEN_ROOTFS"
-printInfo "${NC}${GREEN}zopen initialization complete.${NC}"
+  printVerbose "- Expanding curl to bootstrap dir..."
+  cachedir="$rootfs/var/cache/zopen"
+  [ -e "$cachedir/$curlpax" ] || printError "Could not locate downloaded curl pax."
+  paxrc=$(pax -rf "$cachedir/$curlpax" -s##$rootfs/boot/#)
+  
+  [ -e "../cacert.pem" ] && cp "../cacert.pem" "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
+  if [ -e "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem" ]; then
+    printInfo "- Setting certificate envvar"
+    export SSL_CERT_FILE="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"
+  fi
+  
+  # Need to source the .env file from within the actual curl directory and cannot
+  # spawn sub-process otherwise no access to environment from this script so run inline
+  curldir="$(ls $rootfs/boot |grep curl)"
+  [ -e "$rootfs/boot/$curldir" ] || printError "Could not locate curl for bootstrap. Re-run 'zopen init' to retry"
+  chmod -R 755 "$rootfs/boot/$curldir"
+  curwd=$PWD
+  cd "$rootfs/boot/$curldir/" || printError "Could not access boot curl directory. Re-run 'zopen init' to retry"
+  . .env
+  cd "$curwd"  || printError "Could not change to $curwd. Re-run 'zopen init' to retry"
+  
+  printInfo "- Updating CA cert"
+  ZOPEN_CA="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
+  mkdir -p "$ZOPEN_CA"
+  ZOPEN_CA="$ZOPEN_CA/cacert.pem"
+  export ZOPEN_CA
+  runAndLog "${utildir}/zopen-update-cacert -f"
+  printInfo "- Sourcing environment"
+  . "$configFile"
+  printInfo "- Using bootstrapped curl to install latest release of itself (if available)"
+  curlInstall=$(runAndLog "${utildir}/zopen-download curl")
+  curlInstall=$?
+  [ $curlInstall -ne 0 ] && printError "Unable to install curl; see previous errors and retry the initilisation using the '--re-init' parameter"
 
+  # Code to use this version of meta as "official" install - pin to ensure no overwriting
+  printInfo "- Installing and pinning currently running version of meta" 
+  printVerbose "Current dir: $utildir"
+  metadtInstDir="$ZOPEN_ROOTFS/$zopen_pkginstall/meta-dt"
+  printVerbose "Meta will be installed to $metadtInstDir"
+  mkdir -p "$metadtInstDir"
+
+  if [ -L "$0" ]; then
+    printVerbose "Found a link"
+    # We are running zopen from within a zopen-environment already
+    # De-reference symlinks to get the actual meta location. On a re-init,
+    # this might correlate to the existing location so we can reuse it; otherwise
+    # we need to copy the existing meta to the new location
+    physical="$(ls -l "$0" | sed -e "s/.*-> //")" 
+    full="$(dirname $0)/$physical"
+    real="$(dirname $full)"
+    deref="$( cd "$real/../.." >/dev/null 2>&1 && pwd -P )"
+    
+    if [ "$deref" = "$metadtInstDir" ]; then
+      printInfo "- Re-initialising target is current; no action required"
+    else
+      printInfo "- Copying existing meta to re-initialised location"
+      cp -RT "$deref/"  "$metadtInstDir"
+    fi
+    
+  else
+    printVerbose "Copying local meta"
+    cp -RT "../"  "$metadtInstDir" 
+  fi
+
+  printInfo "- Running alternative utility to allow selection of forked meta"
+  metaInstall=$(runAndLog "${utildir}/zopen-alt meta -s")
+  metaInstall=$?
+  [[ $metaInstall -ne 0 ]] && printError "Unable to install meta; see previous errors and retry the initilisation using the '--re-init' parameter"
+
+  #TODO: Reinstate following code should this fork merge
+  #printInfo "- Installing latest version of meta package into zopen system"
+  #runAndLog "${utildir}/zopen-download meta"
+
+  printInfo "- zopen bootstrapping complete"
+
+  printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
+  profileEnable=$(getInput)
+  if [ -z "$profileEnable" ] && [ "y" = "${profileEnable}" ]; then
+    if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
+      printVerbose "Line not present (grep returned non-0)"
+  cat << EOF >>  "$HOME/.profile"
+  [ -e "\$HOME/.zopen-config" ] && . \$HOME/.zopen-config
+EOF
+    fi
+  fi
+  printInfo "${NC}${YELLOW}- Run '. \$HOME/.zopen-config' to enable zopen environment for current session${NC}"
+  syslog "$ZOPEN_LOG_PATH/audit.log" "$LOG_A" "$CAT_PACKAGE,$CAT_FILE" "INIT" "" "zopen environment initialised as $ZOPEN_ROOTFS"
+  printInfo "${NC}${GREEN}zopen initialization complete.${NC}"
+fi

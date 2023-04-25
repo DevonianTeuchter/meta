@@ -1,4 +1,18 @@
 #!/bin/sh
+exitTrapCommands=""
+addCleanupTrapCmd(){
+  newCmd=$1
+  if [[ -z "$exitTrapCommands" ]]; then
+    exitTrapCommands="$newCmd"
+  else
+    exitTrapCommands="$exitTrapCommands; $newCmd"
+  fi
+}
+function cleanupFunction {
+  [ -n "$exitTrapCommands" ] && eval "$exitTrapCommands"
+}
+trap "cleanupFunction" EXIT INT TERM QUIT HUP
+
 defineANSI() 
 {
   # Standard tty codes
@@ -136,7 +150,7 @@ mutexReq(){
     { [ ! "$lockedpid" = "$mypid" ] && [ ! "$lockedpid" = "$PPID" ]; } && echo "Aborting, Lock for $2 already taken" && exit -1
   fi
   echo "$mypid" > $mutex
-  trap "rm -rf $mutex" EXIT
+  addCleanupTrapCmd "rm -rf $mutex"
 }
 mutexFree(){
   mutex=$1
@@ -315,6 +329,10 @@ printInfo()
 # Used to input sensitive data - turns off echo to the screen for the input
 getInputHidden()
 {
+  # Ensure that we restore the screen to display chars in the event the
+  # script is terminated early (eg. user hits CTRL-C instead of answering
+  # question)
+  addCleanupTrapCmd "stty echo"
   stty -echo
   read zopen_input
   echo $zopen_input
