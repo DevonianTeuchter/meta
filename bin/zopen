@@ -43,14 +43,20 @@ export bindir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd -P )"
 . "${bindir}/lib/common.inc"
 
 args=$*
+legacy=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    "--legacy")
+      shift
+      legacy=true
+    ;;
     "alt")
       shift
       exec "${bindir}/lib/zopen-alt" $@
       ;;
     "build")
       shift
+      [ ! $legacy; ] && printError "Building ports currently requires the --legacy parameter to use legacy packaging system"
       exec "${bindir}/lib/zopen-build" $@
       ;;
     "clean")
@@ -71,11 +77,19 @@ while [[ $# -gt 0 ]]; do
       ;;
     "init")
       shift
-      exec "${bindir}/lib/zopen-init" $@
+      if $legacy; then
+        exec "${bindir}/lib/zopen-init --legacy" $@
+      else
+        exec "${bindir}/lib/zopen-init" $@
+      fi
       ;;
     "install" | "-i")
       shift
-      exec "${bindir}/lib/zopen-download" $@
+      if $legacy; then
+        exec "${bindir}/lib/zopen-install" $@
+      else
+        exec "${bindir}/lib/zopen-download" $@
+      fi
       ;;
     "list" | "-l")
       shift
