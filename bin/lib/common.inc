@@ -1,15 +1,17 @@
 #!/bin/sh
-exitTrapCommands=""
+export ZOPEN_CLEANUP="stty echo" # set this as a default to ensure line visibility!
 addCleanupTrapCmd(){
-  newCmd=$1
-  if [[ -z "$exitTrapCommands" ]]; then
-    exitTrapCommands="$newCmd"
+  newCmd=$(echo "$1" | sed -e 's/^[ ]*//' -e 's/[ ]*$//')
+  if [ -z "$ZOPEN_CLEANUP" ]; then
+    export ZOPEN_CLEANUP="$newCmd"
   else
-    exitTrapCommands="$exitTrapCommands; $newCmd"
+    export ZOPEN_CLEANUP="$(deleteDuplicateEntriesRedux "$ZOPEN_CLEANUP; $newCmd" ";")"
   fi
 }
-function cleanupFunction {
-  [ -n "$exitTrapCommands" ] && eval "$exitTrapCommands"
+cleanupFunction() {
+  [ -n "$ZOPEN_CLEANUP" ] && $(eval "$ZOPEN_CLEANUP" 2>/dev/null)
+  trap - EXIT INT TERM QUIT HUP
+  unset ZOPEN_CLEANUP
 }
 trap "cleanupFunction" EXIT INT TERM QUIT HUP
 
@@ -147,10 +149,10 @@ mutexReq(){
   mypid=$(exec sh -c 'echo $PPID')
   if [ -e "$mutex" ]; then
     lockedpid=$(cat $mutex)
-    { [ ! "$lockedpid" = "$mypid" ] && [ ! "$lockedpid" = "$PPID" ]; } && echo "Aborting, Lock for $2 already taken" && exit -1
+    { [ ! "$lockedpid" = "$mypid" ] && [ ! "$lockedpid" = "$PPID" ]; } && echo "Aborting, Process '$lockedpid' holds the '$2' lock: '$mutex'" && exit -1
   fi
-  echo "$mypid" > $mutex
   addCleanupTrapCmd "rm -rf $mutex"
+  echo "$mypid" > $mutex
 }
 mutexFree(){
   mutex=$1
