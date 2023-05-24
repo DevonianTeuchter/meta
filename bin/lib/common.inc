@@ -54,51 +54,22 @@ defineANSI()
     NC=''
   fi
 }
-ansiupdate(){
+ansiline(){
   deltax=$1
   deltay=$2
   echostr=$3
-  #crsrSetPos $x $y
   if [ $deltax -gt 0 ]; then
-    crsrUp $deltax
+    echostr="${ESC}[${deltax}A$echostr"
   elif [ $deltax -lt 0 ]; then
-    crsrDown $(expr $deltax \* -1)
+    echostr="${ESC}[$(expr $deltax \* -1)A$echostr"
   fi
   if [ $deltay -gt 0 ]; then
-    crsrRight $deltay
+    echostr="${ESC}[${deltax}C$echostr"
   elif [ $deltay -lt 0 ]; then
-    crsrLeft $(expr $deltay \* -1)
+    echostr="${ESC}[$(expr $deltax \* -1)D$echostr"
   fi
  /bin/echo "${echostr}"
-}
-crsrGetPos(){
-# TODO
-    /bin/echo "\027[6n"            # ask the terminal for the position
-    read foo              # store the position in bash variable 'foo'
-    /bin/echo "Current position: >>${foo}<<"
-}
-crsrSetPos(){
-#TODO
-  x=$1
-  y=$2
-  /bin/echo "${ESC}[${y};${x}H"
-}
 
-crsrUp(){
-  chars=$1
-  /bin/echo "${ESC}[${chars}A"
-}
-crsrDown(){
-  chars=$1
-  /bin/echo "${ESC}[${chars}B"
-}
-crsrRight(){
-  chars=$1
-  /bin/echo "${ESC}[${chars}C"
-}
-crsrLeft(){
-  chars=$1
-  /bin/echo "${ESC}[${chars}D"
 }
 
 zosfind(){
@@ -270,6 +241,56 @@ runAndLog()
   fi
   return $rc
 }
+
+microsleep(){
+  # spin-hack for $1 microseconds - use the expr/date/cut to delay
+  # note: not to be used for precise timings!
+  delay=$1
+  [ "$1" -le 0 ] && return
+  curtime=$(date +"%s%N")
+  curtime=$(echo "$curtime" | cut -c 5-13)
+  finish=$(($curtime + $delay))
+  while [ "$curtime" -le  "$finish" ]; do
+    curtime=$(date +"%s%N")
+    curtime=$(echo "$curtime" | cut -c 5-13)
+  done
+}
+progressNetwork(){
+  # Loop until signal received
+  icon=">--"
+  ansiline 0 0 "$icon"
+  while : ; do
+    microsleep 1
+    case "$icon" in
+      '>--') icon='->-';; '->-') icon='-->';; '-->') icon='--<';; '--<') icon='-<-';;'-<-') icon='<--';;'<--') icon='>--';;
+    esac
+    ansiline 1 -1 "$icon"
+  done
+}
+progressSpinner(){
+  # Loop until signal received
+  icon="-"
+  ansiline 0 0 "$icon"
+  while : ; do
+    microsleep 1
+    case "$icon" in
+      '-') icon='\';;      '\') icon='|';;      '|') icon='/';;      '/') icon='-';;
+    esac
+    ansiline 1 -1 "$icon"
+  done
+}
+progressHandler() {
+    type=$1
+    completiontext=$2  # Custom end text (when the process is complete)
+    trapcmd="exit;"
+    [ -n "$completiontext" ] && trapcmd="/bin/echo \"\047[1A\047[30D\047[2K$completiontext\"; $trapcmd"
+    trap "$trapcmd" HUP
+    case "$type" in
+      "network") progressNetwork;;
+      *)         progressSpinner;;
+    esac
+}
+
 
 runInBackgroundWithTimeoutAndLog()
 {
