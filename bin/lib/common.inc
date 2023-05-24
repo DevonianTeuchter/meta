@@ -77,7 +77,7 @@ zosfind(){
   # the installed find command takes precedence but is not compatible with the
   # standard zos find [regex searches for "-name" are not allowed, but
   # "-wholename" is not available on standard zosfind. For the tooling to be
-  # consistent across platofmrs (where findutils is/is not installed) use the
+  # consistent across platforms (where findutils is/is not installed) use the
   # standard zos version
   /bin/find $*
 }
