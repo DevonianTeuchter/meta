@@ -141,22 +141,141 @@ relativePath(){
   set -- $targetPath
   for elem in $sourcePath; do
     if [ -z "$relativePath" ]; then
-      [ "$1" = "$elem" ] || relativePath="$1"
+      if [ -z "$elem" ]; then
+        relativePath="$1"
+      elif [ "$1" = "$elem" ]; then
+      else
+        relativePath="../$1"
+      fi
     else
-      relativePath="../$relativePath"
-      [ ! -z "$1" ] && relativePath="$relativePath/$1"
+      if [ -n "$elem" ]; then
+        relativePath="../$relativePath"
+      else
+        relativePath="$relativePath/$1"
+      fi
     fi
     if [ $# -gt 0 ]; then
       shift
     fi
   done
   # if the target is longer than the source, there might be some additional
-  # elements to append
-  relativePath=$relativePath/$(echo $* | sed "s/ /\//g")
-  IFS="$curIFS"
+  # elements in the shifted $0 to append
+  if [ $# -gt 0 ]; then
+     relativePath=$relativePath/$(echo $* | sed "s/ /\//g")
+  fi
+
+  IFS="$currentIFS"
   echo "$relativePath"
 }
-# Links a package directory into the main zopen root filesystem
+relativePath2(){
+  sourcePath=$1
+  targetPath=$2
+  currentIFS="$IFS"
+  IFS="/"
+  relativePath=''
+  set -- $targetPath
+  for elem in $sourcePath; do
+      if [ -z "$relativePath" ]; then
+        if [ "$1" = "$elem" ]; then
+            shift
+            continue
+        else
+          relativePath="../$elem"
+        fi
+      else
+        if [ -z "$1" ]; then
+          relativePath="$relativePath/$elem"
+        else
+          relativePath="../$relativePath/$elem"
+        fi
+      fi
+    if [ $# -gt 0 ]; then
+      shift
+    fi
+  done
+  # if the target is longer than the source, there might be some additional
+  # elements in the shifted $0 to append
+  if [ $# -gt 0 ]; then
+     relativePath=$relativePath/$(echo $* | sed "s/ /\//g")
+  fi
+  IFS="$currentIFS"
+  echo "$relativePath"
+}
+
+# Merges a package directory's symlinks into the main zopen root filesystem
+mergeIntoSystem(){
+  name=$1          # Name of the package being processed
+  versioneddir=$2  # The directory where the unpax occurred
+  rootfs="$3"
+
+  targetdir="$rootfs/usr"     # The main rootfs/usr location
+
+  printVerbose "Calculating the offset path to store from root"
+  offset=$(dirname "${versioneddir#$rootfs/}")
+  version=$(basename $versioneddir)
+  tmptime=$(date +%Y%m%d%H%M%S)
+  processingDir="$rootfs/tmp/zopen.$tmptime"
+  printVerbose "Temporary processing dir evaluated to: $processingDir"
+
+  virtualStore="$processingDir/$offset"
+  printVerbose "Creating virtual store at: $virtualStore"
+  mkdir -p "$virtualStore"
+
+  printVerbose "Moving from main store location (unpax-dir) to processing store"
+  mv "$versioneddir" "$virtualStore"
+
+  printVerbose "Creating main linked directory in store"
+  $(cd "$virtualStore" && ln -s "$version" "$name")
+
+  printVerbose "Creating virtual root directory structure"
+  mkdir -p "$processingDir/usr"
+
+  printVerbose "Generating relative symlinks in processing location"
+  relpath=$(relativePath2 "$virtualStore/$name" "$processingDir/usr")
+  [ "$relpath" = "/" ] && printError "Relative path calculated as root directory itself!?!"
+
+  printVerbose "Generating symlink tree"
+  
+  printVerbose "Creating directory structure"
+  curdir="$PWD"
+  cd "$virtualStore/$name"
+   # since 'ln *' doesn't invoke globbing to allow multiple files at once,
+   # abuse the Recurse option; this results in "already exists" errors but 
+   # ignore them as the first call should generate the correct link but 
+   # subsequent calls would generate a symlink that has incorrect dereferencing 
+   # and ignoring them is actually faster than individually creating the links!
+  zosfind . -type d | sort -r | while read dir; do
+    dir=$(echo "$dir" | sed "s#^./##")
+    printVerbose "Processing dir: $dir" 
+    [ $dir = "." ] && continue;
+    mkdir -p "$processingDir/usr/$dir"
+    cd "$processingDir/usr/$dir"
+    dirrelpath=$(relativePath2 "$virtualStore/$name/$dir" "$processingDir/usr/$dir")
+    ln -Rs "$dirrelpath/" "." 2>/dev/null
+  done 
+
+  printVerbose "Moving unpaxed processing-directory back to main rootfs store"
+  # this *must* be done before the merge step below or relative symlinks can't
+  # work
+  versioneddirname=$(basename "$versioneddir")
+  mv "$virtualStore/$versioneddirname" "$rootfs/$offset"
+
+  tarfile="$name.usr.tar"
+  printVerbose "Merge symlinks into main filesystem using tmp tar file $tarfile"
+  
+  printVerbose "Generating intermediary tar file"
+  $(cd "$processingDir" && tar -cf "$tarfile" "usr")
+
+  printVerbose "Generating listing for remove processing (including main symlink)"
+  listing=$(tar tf "$processingDir/$tarfile" 2>/dev/null| sort -r)
+  echo "Installed files:" > "$versioneddir/.links"
+  echo "$listing" >>  "$versioneddir/.links"
+  cd "$processingDir" && tar xf "$tarfile" -C "$rootfs" 2>/dev/null
+
+  printInfo "- Integration complete"
+  return 0
+}
+
 symlinkIntoSystem(){
   name=$1
   baseinstalldir=$2
@@ -166,27 +285,27 @@ symlinkIntoSystem(){
   printVerbose "Changing working directory to the install dir for the package"
   cd $basedir
 
-  target=$ZOPEN_ROOTFS/usr
-  dirs=$(zosfind $basedir -type d | grep -v "\.git" | sort -r)
+  target="$ZOPEN_ROOTFS/usr"
+  dirs=$(zosfind "$basedir" -type d | grep -v "\.git" | sort -r)
   ndirs=$(echo "$dirs" | wc -l | tr -d ' ')
   dircnt=0
   echo "# Installed links by package: $name" > $basedir/.links
   printInfo "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
   echo "$dirs" | while read dir; do
     dircnt=$(expr $dircnt + 1)
-    trimdir=$(echo $dir | sed "s#^$basedir##")
+    trimdir=$(echo "$dir" | sed "s#^$basedir##")
     if [[ ! "x$trimdir" = "x" ]]; then 
-      mkdir -p $target/$trimdir
-      filestolink=$(zosfind $dir -type f)
+      mkdir -p "$target/$trimdir"
+      filestolink=$(zosfind "$dir" -type f)
       nfiles=$(echo "$filestolink" | wc -l | tr -d ' ')
       flecnt=0
       pct=0
-      ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+      ansiline 1 0 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
       echo "$filestolink" | while read filetolink; do
         flecnt=$(expr $flecnt + 1)
         pct=`expr $flecnt \* 100`
         pct=`expr $pct / $nfiles`
-        ansiupdate 3 -30 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
+        ansiline 1 0 "${ERASELINE}- Processing ${dircnt} of ${ndirs}: ${pct}% (${flecnt}/${nfiles})"
         trimfile=$(echo $filetolink | sed "s#^$basedir##")
         if [ ! -z $trimfile ]; then
           relpath=$(relativePath "$target/$trimfile" "$filetolink" )
@@ -204,8 +323,51 @@ symlinkIntoSystem(){
       done
     fi
   done
-  ansiupdate 3 -30 "${ERASELINE}- Processed ${ndirs} of ${ndirs}"
+  ansiline 1 0 "${ERASELINE}- Processed ${ndirs} of ${ndirs}"
   printInfo "- Integration complete"
+}
+
+# The following function will remove any orphaned symlinks left after either:
+# - a different version has been installed (where the old symlinks are not reused for
+#   that different version  version ie. the file has been removed from updated version
+# - the main package->version-dir symlink has been removed (which renders any symlinks to
+#   it as dangling so removable)
+unsymlinkFromSystem(){
+  pkg=$1
+  pkginstall=$2
+  rootfs=$3
+  dotlinks=$4
+  if [ -e "$dotlinks" ]; then
+    printInfo "- Removing dangling symlinks in $rootfs/usr/ tree "
+    # Use sed to skip header line in .links file
+    # Note that the contents of the links file are ordered such that
+    # processing occurs depth-first; if, after removing orphaned symlinks,
+    # a directory is empty, then it can be removed.
+    nfiles=$(sed '1d;$d' "$dotlinks" | wc -l  | tr -d ' ')
+    flecnt=0
+    pct=0
+    printInfo "- Processing ${pct}% (${flecnt}/${nfiles})"
+    sed '1d;$d' "$dotlinks"| while read filetounlink; do
+      flecnt=$(expr $flecnt + 1)
+      pct=`expr $flecnt \* 100`
+      pct=`expr $pct / $nfiles`
+      ansiline 1 0 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
+      filetounlink="${filetounlink% symbolic.*}"
+      #filetounlink=$(echo "$filetounlink" | sed "s~(.*) symbolic.*~\1~")
+      if [ -d "$ZOPEN_ROOTFS/$filetounlink" ]; then
+        # rmdir will fail if the directory is not empty - which is what is required,
+        # we either need to remove the empty directory or leave it in place as it is 
+        # still in use
+        rmdir "$rootfs/$filetounlink" 2>/dev/null
+      elif [ -L "$rootfs/$filetounlink" ] && [ ! -e $rootfs/$filetounlink ]; then
+        # the linked-to file no longer exists (ie. the symlink is dangling)
+        rm -f "$rootfs/$filetounlink"
+      fi
+    done
+    ansiline 1 0 "${ERASELINE}- Processed 100% (${nfiles}/${nfiles})"
+  else
+    printError "Could not locate list of current links to verify, dangling links might be present; run 'zopen clean'"
+  fi
 }
 
 zopenInitialize()
@@ -464,7 +626,7 @@ validateVersion()
   operator=$2
   requestedVersion=$3
   dependency=$4
-  if [ ! -z "$operator" ] && [ -z "$version" ]; then
+  if [ -n "$operator" ] && [ -z "$version" ]; then
     printVerbose "$operator ${requestedVersion} requsted, but no version file found in $versionPath." 
     return 1
   elif [ ! -z "$operator" ] && ! compareVersions "${version}" "${requestedVersion}"; then
@@ -479,6 +641,13 @@ deleteDuplicateEntries()
   value=$1
   delim=$2
   echo "$value$delim" | awk -v RS="$delim" '!($0 in a) {a[$0]; printf("%s%s", col, $0); col=RS; }' | sed "s/${delim}$//"
+}
+# reworked version of above to strip blank elements between delims
+deleteDuplicateEntriesRedux() 
+{
+  value=$1
+  delim=$2
+  echo "$value" | awk -v RS="$delim" -v ORS="$delim" ' {gsub("^[ ]+|[ ]$", "", $0); if (NF>0 && !a[$0]++) {print } }' | sed "s/${delim}$//"
 }
 
 # Logging Types
@@ -505,9 +674,9 @@ syslog() {
   module=$4
   location=$5
   msg=$6
-  if [ ! -e $fd ]; then
-    mkdir -p "$(dirname $fd)" 
-    touch $fd
+  if [ ! -e "$fd" ]; then
+    mkdir -p "$(dirname "$fd")" 
+    touch "$fd"
   fi
   echo $(date +"%F %T") $(id | cut -d' ' -f1)::$module:$type:$categories:$location:$msg >> $fd
   

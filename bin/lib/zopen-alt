@@ -36,21 +36,25 @@ setAlt(){
               {count = count + 1; if (count=selection) { print $(selection)} }
       ')"
       printInfo "Setting alternative: $selection: $newver"
-      if [ ! -z $current ]; then
-        printVerbose "Removing symlinks from current version"
-        $utildir/zopen-remove $needle --silent
-      fi
       [ -d $ZOPEN_PKGINSTALL/$newver ] || printError "Mismatch found, no version directory at $newver" 
-      [ ! -z "$needle" ] || printError "$ZOPEN_PKGINSTALL/$needle not found"
+      [ -n "$needle" ] || printError "$ZOPEN_PKGINSTALL/$needle not found"
       if [ -e $ZOPEN_PKGINSTALL/$needle ]; then
         printVerbose "Removing master link"
         rm -rf $ZOPEN_PKGINSTALL/$needle
       fi
+
+      mergeIntoSystem "$needle" "$ZOPEN_PKGINSTALL/$newver" "$ZOPEN_ROOTFS" 
+      printVerbose "New version merged; checking for orphaned files from previous version"
+      # This will remove any old symlinks or dirs that might have changed in an up/downgrade
+      # as the merge process overwrites existing files to point to different version
+      unsymlinkFromSystem "$needle" "$ZOPEN_PKGINSTALL" "$ZOPEN_ROOTFS" "${ZOPEN_PKGINSTALL}/$deref/.links"
+      
+      misrc=$?
+      printVerbose "The merge complete with: $misrc"
       printVerbose "Generating main link from $needle to version: $newver"
       if ! ln -sf $newver $ZOPEN_PKGINSTALL/$needle; then
         printError "Could not create symbolic link name"
       fi
-      symlinkIntoSystem $needle $ZOPEN_PKGINSTALL
       touch "${ZOPEN_PKGINSTALL}/${needle}/.active"
       version="unknown"
       if [ -e "${ZOPEN_PKGINSTALL}/${needle}/.releaseinfo" ]; then
@@ -99,10 +103,10 @@ listAlts(){
 
   if $sett; then
     mutexReq "zopen" "zopen"
-    setAlt $i $needle
+    setAlt "$i" "$needle" "$deref"
     unset $sett
     mutexFree "zopen"
-    listAlts false $needle
+    listAlts false "$needle"
   fi
   exit 0
 }
