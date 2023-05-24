@@ -94,7 +94,7 @@ if [ -z "$rootfs" ]; then
   if $clone; then
     printInfo "- Enter fully-qualified path to clone-target directory:"
   else
-    printInfo "- Enter fully-qualified path to your zopen root directory (default: \$HOME/zopen)"
+    printInfo "- Enter fully-qualified path to your zopen root directory (default: $HOME/zopen)"
   fi
   rootfs=$(getInput)
 else
@@ -107,18 +107,39 @@ if [ -z "$rootfs" ]; then
   fi
   printInfo "- No explicit root set, using default: \$HOME/zopen"
   rootfs="$HOME/zopen"
+else
+  if [ "${rootfs%/}" = '/' ]; then
+    printInfo "- Stripping trailing '/' char"
+    rootfs="${rootfs%})"
+  fi
 fi
 
-echo "- Enter the github oauth token for use in zopen-download. If none (not recommended), press enter"
-zopen_oauth=$(getInputHidden)
-if [ -n "$zopen_oauth" ]; then
-  zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$zopen_oauth"
-else
-  # Placeholder in the .zopen-config
-  zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN="
+if [ -n "$ZOPEN_GIT_OAUTH_TOKEN" ]; then
+  printInfo "- Found existing envvar: ZOPEN_GIT_OAUTH_TOKEN; reuse value (y/n)?"
+   foundGitOauth=$(getInput)
+   if [ -n "$foundGitOauth" ] && [ "y" = "${foundGitOauth}" ]; then
+     zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$ZOPEN_GIT_OAUTH_TOKEN"
+   else
+     unset ZOPEN_GIT_OAUTH_TOKEN
+   fi
+fi
+
+if [ -z "$ZOPEN_GIT_OAUTH_TOKEN" ]; then
+  printInfo "- Enter the github oauth token for use in zopen-download. If none (not recommended), press enter"
+  zopen_oauth=$(getInputHidden)
+  if [ -n "$zopen_oauth" ]; then
+    zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN=$zopen_oauth"
+  else
+    # Placeholder in the .zopen-config
+    zopen_oauth="export ZOPEN_GIT_OAUTH_TOKEN="
+  fi
 fi
 
 if ! $clone; then
+  printInfo "Checking for existence of specified root: '$rootfs'"
+  [ -e "$rootfs" ] || mkdir -p "$rootfs" || printError "Unable to create zopen root filesystem at '$rootfs'"
+  [ -d "$rootfs" ] || printError "Specified location '$rootfs' is not a directoryUnable to access root file system at '$rootfs'; check permissions"  
+  [ -w "$rootfs" ] || printError "Unable to access root file system at '$rootfs'; check permissions"  
   printInfo "- Populating standard file system"
   [ -e "$rootfs/bin" ] || mkdir -p "$rootfs/bin"
   [ -e "$rootfs/etc" ] || mkdir -p "$rootfs/etc"
@@ -128,6 +149,7 @@ if ! $clone; then
   [ -e "$rootfs/usr/share/zopen" ] || mkdir -p "$rootfs/usr/share/zopen"
   [ -e "$rootfs/var/cache/zopen" ] || mkdir -p "$rootfs/var/cache/zopen"
   [ -e "$rootfs/var/log" ] || mkdir -p "$rootfs/var/log"
+  [ -e "$rootfs/var/tmp" ] || mkdir -p "$rootfs/var/tmp"
   
   printInfo "- Creating path for bootstrap files"
   [ -e "$rootfs/boot" ] || mkdir -p "$rootfs/boot"
@@ -245,7 +267,7 @@ if [ -e "\$ZOPEN_ROOTFS/etc/profiled" ]; then
       flecnt=\$(expr \$flecnt + 1)
       pct=\$(expr \$flecnt \* 100)
       pct=\$(expr \$pct / \$dotenvcnt)
-    /bin/echo "\047[1A\047[$30D\047[2K- Processing \$zot configuration: \${pct}% (\${flecnt}/\${dotenvcnt})"
+    /bin/echo "\047[1A\047[$30D\047[2K- Processing \$zot configuration: \${pct}% (\${flecnt}/\${dotenvcnt}): Initializing \${packagedir#\$ZOPEN_ROOTFS/etc/profiled/}..."
     . \$FILE
     PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
     PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
@@ -281,11 +303,13 @@ if $clone; then
 else
   export ZOPEN_ROOTFS="$rootfs"
 
-  printInfo "- Check for local curl pax"
+  printInfo "- Check for shipped curl pax"
   curlpax="curl-7.83.1.20230120_231325.zos.pax.Z"
-  if [ -e "../$curlpax" ]; then
+
+  curllcn=$(findrev "${utildir}" "$curlpax")
+  if [ -e "$curllcn/$curlpax" ]; then
     printInfo "- Found $curlpax. Adding to zopen cache to install as bootstrap"
-    cp "../$curlpax" "$rootfs/var/cache/zopen"
+    cp "$curllcn/$curlpax" "$rootfs/var/cache/zopen"
   else
     printInfo "- Downloading curl to cache using HWT"
     curlurl="https://github.com/ZOSOpenTools/curlport/releases/download/curlport_420/$curlpax"
@@ -295,13 +319,22 @@ else
   fi
   printVerbose "- Expanding curl to bootstrap dir..."
   cachedir="$rootfs/var/cache/zopen"
-  [ -e "$cachedir/$curlpax" ] || printError "Could not locate downloaded curl pax."
+  [ -e "$cachedir/$curlpax" ] || printError "Could not locate bootstrap curl pax."
   paxrc=$(pax -rf "$cachedir/$curlpax" -s##$rootfs/boot/#)
-  
-  [ -e "../cacert.pem" ] && cp "../cacert.pem" "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
-  if [ -e "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem" ]; then
+
+  cacertlcn=$(findrev "${utildir}" "cacert.pem")
+  if [ -e "$cacertlcn/cacert.pem" ]; then
+    printInfo "- Found default cacert.pem; copying to zopen file system"
+    cp "$cacertlcn/cacert.pem" "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR"
+  else
+    printError "Could not locate default cacert.pem at '../cacert.pem'."
+  fi
+
+  if [ -r "$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem" ]; then
     printInfo "- Setting certificate envvar"
     export SSL_CERT_FILE="$ZOPEN_ROOTFS/$ZOPEN_CA_DIR/cacert.pem"
+  else
+    printError "- Could not locate cacert.pem at '$ZOPEN_ROOTFS/$ZOPEN_CA_DIR'"
   fi
   
   # Need to source the .env file from within the actual curl directory and cannot
@@ -326,6 +359,7 @@ else
   curlInstall=$(runAndLog "${utildir}/zopen-download curl")
   curlInstall=$?
   [ $curlInstall -ne 0 ] && printError "Unable to install curl; see previous errors and retry the initilisation using the '--re-init' parameter"
+  . "$configFile"
 
   # Code to use this version of meta as "official" install - pin to ensure no overwriting
   printInfo "- Installing and pinning currently running version of meta" 
@@ -360,7 +394,7 @@ else
   printInfo "- Running alternative utility to allow selection of forked meta"
   metaInstall=$(runAndLog "${utildir}/zopen-alt meta -s")
   metaInstall=$?
-  [[ $metaInstall -ne 0 ]] && printError "Unable to install meta; see previous errors and retry the initilisation using the '--re-init' parameter"
+  [ $metaInstall -ne 0 ] && printError "Unable to install meta; see previous errors and retry the initilisation using the '--re-init' parameter"
 
   #TODO: Reinstate following code should this fork merge
   #printInfo "- Installing latest version of meta package into zopen system"
@@ -370,7 +404,7 @@ else
 
   printInfo "- Configure .profile to automatically source zopen environment (y/n)?"
   profileEnable=$(getInput)
-  if [ -z "$profileEnable" ] && [ "y" = "${profileEnable}" ]; then
+  if [ -n "$profileEnable" ] && [ "y" = "${profileEnable}" ]; then
     if ! grep -q ". \$HOME/.zopen-config" "$HOME/.profile"; then
       printVerbose "Line not present (grep returned non-0)"
   cat << EOF >>  "$HOME/.profile"
