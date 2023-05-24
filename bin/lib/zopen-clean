@@ -27,8 +27,12 @@ cleanUnused(){
     printInfo "No currently installed version of package '${needle}'"
     return
   fi
-  deref=$(ls -l $ZOPEN_PKGINSTALL/$needle | awk '{ print $(NF) }')
-  printVerbose "Current version: ${deref#$ZOPEN_PKGINSTALL/}"
+  if [ -e "$ZOPEN_PKGINSTALL/$needle" ]; then
+    deref=$(ls -l $ZOPEN_PKGINSTALL/$needle | awk '{ print $(NF) }')
+    printVerbose "Current version: ${deref#$ZOPEN_PKGINSTALL/}"
+  else
+    printInfo "No current version of $needle installed. Removing all unused versions"
+  fi
 
   i=0
   current=0
@@ -65,12 +69,17 @@ cleanUnused(){
 }
 cleanDangling(){
   printVerbose "Removing dangling symlinks from the file structure"
+  progressHandler "spinner" "- Dangling link removal complete" &
+  ph=$!
+  killph="kill -HUP $ph"
+  addCleanupTrapCmd "$killph"
   flecnt=0
   zosfind $ZOPEN_ROOTFS -type l -exec test ! -e {} \; -print | while read sl; do
     printVerbose "Removing symlink '$sl'"
     rm -f $sl
     flecnt=$(expr $flecnt + 1)
   done
+  $killph 2>/dev/null  # if the timer is not running, the kill will fail
   syslog $ZOPEN_LOG_PATH/audit.log $LOG_A "$CAT_FILE" "CLEAN" "cleanDangling" "zopen system scanned for dangling symlinks; $flecnt link(s) removed"
 }
 cleanCache(){
