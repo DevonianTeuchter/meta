@@ -109,7 +109,7 @@ defineEnvironment()
 #
 printColors()
 {
-  /bin/echo "$1"
+  /bin/echo "$@"
 }
 
 mutexReq(){
@@ -494,6 +494,7 @@ printError()
   [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printSoftError "${1}"
   [ ! -z "$xtrc" ] && set -x
+  cleanupFunction
   exit 4
 }
 
@@ -508,7 +509,7 @@ printInfo()
 {
   [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "$1" >&2
-  [ ! -z "$xtrc" ] && set -x
+  [ -n "$xtrc" ] && set -x
 }
 
 # Used to input sensitive data - turns off echo to the screen for the input
