@@ -82,6 +82,19 @@ zosfind(){
   /bin/find $*
 }
 
+findrev () {
+  haystack="$1"
+  needle="$2"
+  while [[ "$haystack" != "" && "$haystack" != "/" && "$haystack" != "./" && ! -e "$haystack/$needle" ]]; do
+    haystack=${haystack%/*}
+  done
+  echo "$haystack"
+}
+
+strtrim(){
+  echo "$1" | sed -e 's/^[ ]*//' -e 's/[ ]*$//'
+}
+
 defineEnvironment()
 {
   # Required for proper operation of z/OS auto-conversion support
