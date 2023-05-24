@@ -267,8 +267,8 @@ if [ -e "\$ZOPEN_ROOTFS/etc/profiled" ]; then
       flecnt=\$(expr \$flecnt + 1)
       pct=\$(expr \$flecnt \* 100)
       pct=\$(expr \$pct / \$dotenvcnt)
-    /bin/echo "\047[1A\047[$30D\047[2K- Processing \$zot configuration: \${pct}% (\${flecnt}/\${dotenvcnt}): Initializing \${packagedir#\$ZOPEN_ROOTFS/etc/profiled/}..."
-    . \$FILE
+    /bin/echo "\047[1A\047[$30D\047[2K- Processing \$zot configuration: \${pct}% (\${flecnt}/\${dotenvcnt})"
+    [ -e \$FILE ] && . \$FILE
     PATH=\$ZOPEN_ROOTFS/usr/bin:\$ZOPEN_ROOTFS/bin:\$ZOPEN_ROOTFS/boot:\$(sanitizeEnvVar \"\$PATH\" \":\" \"^\$ZOPEN_PKGINSTALL/.*\$\")
     PATH=\$(deleteDuplicateEntries \"\$PATH\" \":\")
     LIBPATH=\$ZOPEN_ROOTFS/usr/lib:\$(sanitizeEnvVar "\$LIBPATH" ":" "^\$ZOPEN_PKGINSTALL/.*\$")
@@ -387,8 +387,8 @@ else
     fi
     
   else
-    printVerbose "Copying local meta"
-    cp -RT "../"  "$metadtInstDir" 
+    printVerbose "Copying local meta; work out where to find all files"
+    cp -RT "${utildir}/../../"  "$metadtInstDir" 
   fi
 
   printInfo "- Running alternative utility to allow selection of forked meta"
