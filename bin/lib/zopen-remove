@@ -47,8 +47,6 @@ removePackages(){
           rm -f "$ZOPEN_PKGINSTALL/$pkg/"
         fi
         printVerbose "Main symlink removed, removing dangling symlinks"
-#        curlInstall=$(runWithProgress 300 "unsymlinkFromSystem" "$pkg" "$ZOPEN_PKGINSTALL" "$ZOPEN_ROOTFS" "$installedlinksfile")
-#        curlInstall=$?
         unsymlinkFromSystem "$pkg" "$ZOPEN_PKGINSTALL" "$ZOPEN_ROOTFS" "$installedlinksfile"
       fi
 
