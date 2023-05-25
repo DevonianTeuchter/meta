@@ -72,6 +72,11 @@ ansiline(){
 
 }
 
+getScreenCols(){
+  # Note tput does not handle ssh sessions too well...
+  stty | awk -F'[/=;]' '/columns/ { print $4}' | tr -d " "
+}
+
 zosfind(){
   # Use the standard z/OS find utility; If the findutils package is installed,
   # the installed find command takes precedence but is not compatible with the
@@ -351,7 +356,7 @@ unsymlinkFromSystem(){
   rootfs=$3
   dotlinks=$4
   if [ -e "$dotlinks" ]; then
-    printInfo "- Removing dangling symlinks in $rootfs/usr/ tree "
+    printInfo "- Checking and removing dangling/obsolete symlinks in $rootfs/usr/ tree "
     # Use sed to skip header line in .links file
     # Note that the contents of the links file are ordered such that
     # processing occurs depth-first; if, after removing orphaned symlinks,
@@ -417,27 +422,24 @@ runAndLog()
   return $rc
 }
 
-microsleep(){
-  # spin-hack for $1 microseconds - use the expr/date/cut to delay
-  # note: not to be used for precise timings!
-  delay=$1
-  [ "$1" -le 0 ] && return
-  curtime=$(date +"%s%N")
-  curtime=$(echo "$curtime" | cut -c 5-13)
-  finish=$(($curtime + $delay))
-  while [ "$curtime" -le  "$finish" ]; do
-    curtime=$(date +"%s%N")
-    curtime=$(echo "$curtime" | cut -c 5-13)
+spinloop(){
+  # in the absence of generic ms/ns reporting, spin-loop instead - not ideal
+  # but without pre-reqing packages...
+  i=$1
+  while [ $i -ge 0 ]; do
+    true > /dev/null
+    i=$(( i - 1 ))
   done
 }
 progressNetwork(){
   # Loop until signal received
-  icon=">--"
+  icon="-----"
   ansiline 0 0 "$icon"
   while : ; do
-    microsleep 1
+    spinloop 1000
     case "$icon" in
-      '>--') icon='->-';; '->-') icon='-->';; '-->') icon='--<';; '--<') icon='-<-';;'-<-') icon='<--';;'<--') icon='>--';;
+      '-----') icon='>----';; '>----') icon='->---';; '->---') icon='-->--';; '-->--') icon='--->-';; '--->-') icon='---->';;
+      '---->') icon='----<';; '----<') icon='---<-';; '---<-') icon='--<--';; '--<--') icon='-<---';; '-<---') icon='<----';; '<----') icon='-----';;
     esac
     ansiline 1 -1 "$icon"
   done
@@ -447,9 +449,9 @@ progressSpinner(){
   icon="-"
   ansiline 0 0 "$icon"
   while : ; do
-    microsleep 1
+    spinloop 1000
     case "$icon" in
-      '-') icon='\';;      '\') icon='|';;      '|') icon='/';;      '/') icon='-';;
+      '-') icon='\';; '\') icon='|';; '|') icon='/';; '/') icon='-';;
     esac
     ansiline 1 -1 "$icon"
   done
@@ -499,14 +501,14 @@ printSoftError()
 {
   [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${RED}${BOLD}***ERROR: ${NC}${RED}${1}${NC}" >&2
-  [ ! -z "$xtrc" ] && set -x
+  [ -n "$xtrc" ] && set -x
 }
 
 printError()
 {
   [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printSoftError "${1}"
-  [ ! -z "$xtrc" ] && set -x
+  [ -n "$xtrc" ] && set -x
   cleanupFunction
   exit 4
 }
@@ -515,7 +517,7 @@ printWarning()
 {
   [ -z "${-%%*x*}" ] && set +x && xtrc="-x" || xtrc=""
   printColors "${NC}${YELLOW}${BOLD}***WARNING: ${NC}${YELLOW}${1}${NC}" >&2
-  [ ! -z "$xtrc" ] && set -x
+  [ -n "$xtrc" ] && set -x
 }
 
 printInfo()
@@ -528,9 +530,9 @@ printInfo()
 # Used to input sensitive data - turns off echo to the screen for the input
 getInputHidden()
 {
-  # Ensure that we restore the screen to display chars in the event the
-  # script is terminated early (eg. user hits CTRL-C instead of answering
-  # question)
+  # Register trap-handler to try and ensure that we restore the screen to display 
+  # chars in the event the script is terminated early (eg. user hits CTRL-C instead of 
+  # answering the masked question)
   addCleanupTrapCmd "stty echo"
   stty -echo
   read zopen_input

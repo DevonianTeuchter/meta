@@ -133,8 +133,11 @@ printDetailListEntries()
   exit 0
 }
 printInstalledEntries(){
+  scrcols=$(getScreenCols)
+  numcols=3
+  colwidth=$(($scrcols / $numcols -1 ))
   if [ ! -z "$1" ] && ! $noheader; then
-    printf "${NC}${UNDERLINE}%-20s %-30s %-30s\n${NC}" "Package" "Installed version" "File version"
+    printf "${NC}${UNDERLINE}%-${colwidth}s %-${colwidth}s %-${colwidth}s\n${NC}" "Package" "Installed version" "File version"
   fi
   installedPackages="$(zosfind $ZOPEN_PKGINSTALL -name .active -follow 2>/dev/null | grep -v "[^-]*-.*")"
   printVerbose "Packages: $installedPackages"
@@ -158,7 +161,7 @@ printInstalledEntries(){
       fileversion="$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
       reponame=${fileversion%-*}
       if ! $noversions; then
-        printf '%-20s %-30s %-30s %-15s\n' "$reponame" "$dotversion" "$fileversion"
+        printf "%-${colwidth}s %-${colwidth}s %-${colwidth}s\n" "$reponame" "$dotversion" "$fileversion"
       else
         printf "%s\n" "$reponame"
       fi
