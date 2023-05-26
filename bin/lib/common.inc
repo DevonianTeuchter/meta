@@ -355,7 +355,7 @@ unsymlinkFromSystem(){
   rootfs=$2
   dotlinks=$3
   if [ -e "$dotlinks" ]; then
-    printInfo "- Checking and removing dangling/obsolete symlinks in $rootfs/usr/ tree "
+    printInfo "- Checking for obsoleted files in $rootfs/usr/ tree from $pkg"
     # Use sed to skip header line in .links file
     # Note that the contents of the links file are ordered such that
     # processing occurs depth-first; if, after removing orphaned symlinks,
