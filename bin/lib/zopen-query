@@ -159,7 +159,7 @@ printInstalledEntries(){
       printInfo "$originalTag"
     else
       fileversion="$( cd "$(dirname "$repo")" >/dev/null 2>&1 && pwd -P | xargs basename)"
-      reponame=${fileversion%-*}
+      reponame=$(dirname "$repo" | xargs basename)
       if ! $noversions; then
         printf "%-${colwidth}s %-${colwidth}s %-${colwidth}s\n" "$reponame" "$dotversion" "$fileversion"
       else
