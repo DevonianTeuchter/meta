@@ -250,7 +250,7 @@ handlePackageInstall(){
   if ! $downloadOnly & ! $cacheOnly; then
     installdirname="${pax%.pax.Z}" # Use full pax name as default
 
-    printInfo "- Extracting $pax..."
+    printInfo "- Processing $pax..."
     baseinstalldir="."
     paxredirect=""
     if ! $localInstall; then
@@ -267,7 +267,7 @@ handlePackageInstall(){
       rm -rf "$baseinstalldir/$installdirname"
     fi
 
-    if ! runAndLog "pax -rf $pax -p p $paxredirect ${redirectToDevNull}"; then
+    if ! runLogProgress "pax -rf $pax -p p $paxredirect ${redirectToDevNull}" "Expanding $pax" "Expanded"; then
       printWarning "Errors unpaxing, package directory state unknown"
       printInfo    "Use zopen alt to select previous version"
       continue;
@@ -323,7 +323,7 @@ EOF
       printVerbose "New version merged; checking for orphaned files from previous version"
       # This will remove any old symlinks or dirs that might have changed in an upgrade
       # as the merge process overwrites existing files to point to different version
-      unsymlinkFromSystem "$pkg" "$ZOPEN_PKGINSTALL" "$ZOPEN_ROOTFS" "$currentlinkfile"
+      unsymlinkFromSystem "$name" "$ZOPEN_ROOTFS" "$currentlinkfile"
     fi
     if $setactive; then
       printVerbose "Marking this version as installed"

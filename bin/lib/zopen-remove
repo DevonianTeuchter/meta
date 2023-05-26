@@ -47,7 +47,7 @@ removePackages(){
           rm -f "$ZOPEN_PKGINSTALL/$pkg/"
         fi
         printVerbose "Main symlink removed, removing dangling symlinks"
-        unsymlinkFromSystem "$pkg" "$ZOPEN_PKGINSTALL" "$ZOPEN_ROOTFS" "$installedlinksfile"
+        unsymlinkFromSystem "$pkg" "$ZOPEN_ROOTFS" "$installedlinksfile"
       fi
 
       printInfo "- Removing profiled entry"

@@ -352,9 +352,8 @@ symlinkIntoSystem(){
 #   it as dangling so removable)
 unsymlinkFromSystem(){
   pkg=$1
-  pkginstall=$2
-  rootfs=$3
-  dotlinks=$4
+  rootfs=$2
+  dotlinks=$3
   if [ -e "$dotlinks" ]; then
     printInfo "- Checking and removing dangling/obsolete symlinks in $rootfs/usr/ tree "
     # Use sed to skip header line in .links file
@@ -371,7 +370,6 @@ unsymlinkFromSystem(){
       pct=`expr $pct / $nfiles`
       ansiline 1 0 "${ERASELINE}- Processing ${pct}% (${flecnt}/${nfiles})"
       filetounlink="${filetounlink% symbolic.*}"
-      #filetounlink=$(echo "$filetounlink" | sed "s~(.*) symbolic.*~\1~")
       if [ -d "$ZOPEN_ROOTFS/$filetounlink" ]; then
         # rmdir will fail if the directory is not empty - which is what is required,
         # we either need to remove the empty directory or leave it in place as it is 
@@ -419,6 +417,31 @@ runAndLog()
   if [ ! -z "${SSH_TTY}" ]; then
     chtag -r $SSH_TTY
   fi
+  return $rc
+}
+
+runLogProgress(){
+  printVerbose "$1"
+  if [ -n "$2" ]; then
+    printInfo "- $2"
+  else
+    printInfo "- Running"
+  fi
+  if [ -n "$3" ]; then
+    completeText="$3"
+  else
+    completeText="Complete"
+  fi
+  progressHandler "spinner" "- $completeText" &
+  ph=$!
+  killph="kill -HUP $ph"
+  addCleanupTrapCmd "$killph"
+  eval "$1"
+  rc=$?
+  if [ ! -z "${SSH_TTY}" ]; then
+    chtag -r $SSH_TTY
+  fi
+  $killph 2>/dev/null  # if the timer is not running, the kill will fail
   return $rc
 }
 
