@@ -316,13 +316,13 @@ handlePackageInstall(){
         cat << EOF > "$ZOPEN_ROOTFS/etc/profiled/$name/dotenv"
 curdir=\$(pwd)
 cd "$baseinstalldir/$name" >/dev/null 2>&1
-if [ -f ".env" ]; then
-  . ./.env
+if [ -f ".appenv" ]; then
+  . ./.appenv
 fi
 cd \$curdir  >/dev/null 2>&1
 EOF
         printInfo "- Sourcing environment to run any setup"
-        cd "$ZOPEN_ROOTFS" && . "$ZOPEN_ROOTFS/etc/profiled/$name/dotenv"
+        cd "$baseinstalldir/$name" && "./setup.sh"
       fi
     fi
     if $unInstallOldVersion; then
