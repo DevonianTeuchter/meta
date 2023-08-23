@@ -73,12 +73,12 @@ printDetailListEntries()
           printError "Unable to retrieve remote information"
         fi
         latestTag=$(/bin/printf "%s" "$latest" | jq -e -r '.tag_name')
-        if [ -e "${ZOPEN_PKGINSTALL}/${repo}/.releaseinfo" ]; then
+        if [ -e "${ZOPEN_PKGINSTALL}/${repo}/${repo}/.releaseinfo" ]; then
           originalTag=$(cat "${ZOPEN_PKGINSTALL}/${repo}/.releaseinfo")
         else
           originalTag="Not installed"
         fi
-        if [ -e "${ZOPEN_PKGINSTALL}/${repo}/.version" ]; then
+        if [ -e "${ZOPEN_PKGINSTALL}/${repo}/${repo}/.version" ]; then
           dotversion=$(cat "${ZOPEN_PKGINSTALL}/${repo}/.version")
         else
           dotversion="N/A"
@@ -116,8 +116,8 @@ printDetailListEntries()
       fi
     
       if $listport; then
-        if [ -e "${ZOPEN_PKGINSTALL}/${repo}/.releaseinfo" ]; then
-          originalTag=$(cat "${ZOPEN_PKGINSTALL}/${repo}/.releaseinfo")
+        if [ -e "${ZOPEN_PKGINSTALL}/${repo}/${repo}/.releaseinfo" ]; then
+          originalTag=$(cat "${ZOPEN_PKGINSTALL}/${repo}/${repo}/.releaseinfo")
         else
           originalTag="Not installed"
         fi
