@@ -448,7 +448,9 @@ zopenInitialize()
 {
   defineEnvironment
   defineANSI
-  processConfig
+  if [ -z "$ZOPEN_DONT_PROCESS_CONFIG" ]; then
+    processConfig
+  fi
 
   ZOPEN_JSON_CACHE_URL="https://zosopentools.github.io/meta/api/zopen_releases.json"
 }
@@ -663,8 +665,11 @@ processConfig()
 {
   export ZOPEN_QUICK_LOAD=1
   if [ -z "$ZOPEN_ROOTFS" ]; then
-    if [ -f "$HOME/.zopen-config" ]; then
-      . "$HOME/.zopen-config"
+    relativeRootDir="$(cd "$(dirname "$0")/../.." >/dev/null 2>&1 && pwd -P)"
+    if [ -f "$relativeRootDir/etc/.zopen-config" ]; then
+      . "$relativeRootDir/etc/.zopen-config"
+    else
+      printError "Source the .zopen-config prior to running $0"
     fi
   fi
 }
