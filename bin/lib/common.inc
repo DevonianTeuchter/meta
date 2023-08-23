@@ -15,6 +15,32 @@ cleanupFunction() {
 }
 trap "cleanupFunction" EXIT INT TERM QUIT HUP
 
+validateReleaseLine(){
+  echo "$1" | awk '
+    toupper($1)=="DEV"    {print toupper($0)}
+    toupper($1)=="STABLE" {print toupper($0)}
+                          { print ""}
+  '
+}
+
+# Attempt to fully dereference a symlink without any bashisms or arcane set logic
+# using some simplistic (recursive!) logic
+deref(){
+  testpath="$1"
+  if [ -L "$testpath" ]; then
+    child=$(basename "$testpath")
+    symlink=$(ls -l "$testpath" | sed 's/.*-> \(.*\)/\1/')
+    parent=$(dirname "$testpath")
+    relpath="$parent/$symlink"
+    relparent=$(dirname "$relpath")
+    abspath=$(cd "$relparent" && pwd -P)
+    testpath="$abspath/$child"
+    deref "$testpath"
+  else
+    [ -n "$testpath" ] && echo "$testpath" && unset testpath
+  fi
+}
+
 defineANSI() 
 {
   # Standard tty codes
@@ -141,7 +167,7 @@ mutexReq(){
   mypid=$(exec sh -c 'echo $PPID')
   if [ -e "$mutex" ]; then
     lockedpid=$(cat $mutex)
-    { [ ! "$lockedpid" = "$mypid" ] && [ ! "$lockedpid" = "$PPID" ]; } && echo "Aborting, Process '$lockedpid' holds the '$2' lock: '$mutex'" && exit -1
+    { [ ! "$lockedpid" = "$mypid" ] && [ ! "$lockedpid" = "$PPID" ]; } && kill -0 "$lockedpid" 2>/dev/null && echo "Aborting, Active process '$lockedpid' holds the '$2' lock: '$mutex'" && exit -1
   fi
   addCleanupTrapCmd "rm -rf $mutex"
   echo "$mypid" > $mutex
@@ -356,7 +382,8 @@ unsymlinkFromSystem(){
       filenames=""
       while read filetounlink; do
         tid=$(( tid + 1 ))
-        filenames="$filenames\n$filetounlink"
+        filetounlink=$(echo "$filetounlink" | sed 's/\(.*\).symbolic.*/\1/')
+        filenames=$(/bin/printf "%s\n%s" "$filenames" "$filetounlink")
         if [ "$(( tid % threshold ))" -eq 0 ]; then
           deletethread "$filenames" "$tempDirFile" &
           printVerbose "Started delete thread: $!"
@@ -398,7 +425,6 @@ deletetask () {
     tempDirFile="$1"
     filename="$2"
     [ -z "$filename" ] && return 0
-    filename=$(echo "$filename" | sed 's/\(.*\).symbolic.*/\1/')
     filename="$ZOPEN_ROOTFS/$filename"
     if [ -d "$filename" ]; then
         # Add to the queue for checking once files are gone if unique
@@ -414,7 +440,7 @@ deletetask () {
         rm -f "$filename" >/dev/null 2>&1
       fi
     else 
-      echo "Unprocessable file: $filename" >> "$tempTrash" 
+      echo "Unprocessable file: '$filename'" >> "$tempTrash" 
     fi
 }
 
